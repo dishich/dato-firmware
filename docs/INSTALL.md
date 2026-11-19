@@ -1,5 +1,11 @@
 # Install and recover
 
+> [!CAUTION]
+> **BEFORE YOU FLASH: ASK YOUR AI AGENT TO VERIFY THIS FILE FITS YOUR EXACT DEVICE.**
+> A wrong firmware image can leave your instrument unable to start. Ask for a **read-only compatibility check first**. Have the agent show you the detected model and board or USB identity, the exact release filename, and its SHA-256 match. Confirm those findings against the [installation guide](https://github.com/dishich/dato-firmware/blob/main/docs/INSTALL.md) and [Dato support](https://dato.mu/support/).
+>
+> **DUO** — Brains 1 / Kinetis K20 only. Confirm normal USB ID `1fc9:818a` before entering the bootloader. A Brains 2 / i.MX RT needs different firmware. **DRUM** — Dato DRUM RP2350 with USB-MIDI firmware update support. Identify it with drumtool first. If the hardware, checksum or recovery steps are unclear, stop and contact Dato. Back up your sounds and record your pattern before authorizing any write.
+
 Download the assets for your instrument from the [release](https://github.com/dishich/dato-firmware/releases/latest). Keep its SHA256SUMS file alongside them. Compare each downloaded file with its entry using `shasum -a 256 FILENAME` on macOS or `sha256sum FILENAME` on Linux. The procedure below was exercised on macOS. Connect one unit of the model being updated at a time with a data-capable USB cable. Keep power connected through the write.
 
 ## DUO Brains 1 only
