@@ -14,6 +14,12 @@ Two small instruments, one MIDI cable. My custom DUO adds voices for melodic tec
 
 Five pocket pages cover the mode colours, button combinations, per-track sixteenths, live effects and the MIDI connection.
 
+### What the firmware changes
+
+- **Stay together over MIDI.** DRUM leads. Sweeping its filter sends fewer duplicate control messages. Hold ×2 on DUO for a fill, release it and the melody returns to the master's current step.
+- **Change the synth's character.** DUO has four voices: Factory, Techno, Organic and Organic East. The custom voices combine different keyboard scales with tuned filter and echo settings. Accent individual steps and optionally dip the synth under the kick.
+- **Play 96 drum sounds.** Three banks of 32. Each bank has four tracks with eight sounds per track. Factory's 32 are built into the firmware. The two additional kits supply 64. Set one track to sixteenths while the others hold eighths.
+
 ### Play the pair
 
 Connect **DRUM MIDI OUT → DUO MIDI IN** using a 5-pin DIN cable. Set the DUO speed knob near the middle and press Play on DRUM. This gives a 1:1 pulse. Each instrument has its own audio output.
