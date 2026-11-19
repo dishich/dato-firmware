@@ -40,9 +40,17 @@ I developed the DUO modes with Claude Fable. I wanted a bass voice for melodic t
 
 On startup, each custom mode draws from four eight-step patterns. Techno includes a low pulse and a descending line. Organic has a phrase written to answer the bongos. Organic East has its own bass and Hijaz-style phrases. Pressing both transpose arrows during a jam changes the mode and preserves your running sequence.
 
-- **DUO gestures.** With the sequencer stopped, hold Accent and tap a step to accent it. Accent + transpose up switches kick ducking. When playing to the DRUM, holding ×2 adds temporary steps. Release it and the melody comes back to its original place in the bar.
+- **DUO gestures.** With the sequencer stopped, hold Accent and tap a step to accent it. When playing to the DRUM, holding ×2 adds temporary steps. Release it and the melody comes back to its original place in the bar.
 - **DRUM kits.** Press the next-sample buttons on tracks 1 and 2 together to cycle Factory → Techno → Organic. Factory's 32 sounds are embedded. Techno and Organic read editable slots 30–61 and 62–93. Install either the original downloadable samples or the banks rebuilt from the demo recipe.
 - **DRUM rhythm.** Press both sample arrows of a single track together to toggle eighths and sixteenths. The filter sends fewer redundant MIDI messages. Sample switching, swing and retrigger handling have also been revised.
+
+### Hear the kick sidechain
+
+Connect **DRUM MIDI OUT → DUO MIDI IN**. Play a steady kick and hold a long note on the DUO. Hold **Accent**, tap and release **Transpose ↑**, then release Accent. The keys flash green for on and red for off. The default is off. DUO remembers the setting after power-off.
+
+Kick notes on MIDI channel 10 (notes 30–37) briefly lower the entire dry synth voice. A full-strength hit dips up to **3 dB in Factory and Techno** or **1.5 dB in Organic and Organic East**. Softer hits produce a smaller dip. The delay and reverb keep ringing. Audio from the two instruments can go to separate speakers.
+
+[Play the 16-second sidechain comparison](https://github.com/dishich/dato-firmware/releases/download/v1.2.66/DUO-sidechain-AB.mp4). Listen to the isolated DUO recording at one volume. At 0:00 Organic plays without a trigger, then with the kick trigger at 0:04. Techno repeats the comparison at 0:08 and 0:12. The audio comes from the DUO 1.2.63 bench test. The panel toggle described above is in the released 1.2.66 build.
 
 ### What was checked
 
