@@ -1,0 +1,1665 @@
+diff --git a/drum/CMakeLists.txt b/drum/CMakeLists.txt
+index 34838b7..2460767 100644
+--- a/drum/CMakeLists.txt
++++ b/drum/CMakeLists.txt
+@@ -22,7 +22,17 @@ generate_version_header(${CMAKE_BINARY_DIR}/generated/version.h)
+ 
+ project(${EXECUTABLE_NAME})
+ 
++find_package(Python3 REQUIRED COMPONENTS Interpreter)
++file(GLOB FACTORY_WAVS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../samples/factory_kit/*.wav")
++set(FACTORY_AUDIO "${CMAKE_CURRENT_BINARY_DIR}/generated/factory_audio.cpp")
++add_custom_command(OUTPUT "${FACTORY_AUDIO}"
++  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/embed_factory_audio.py"
++          "${FACTORY_AUDIO}" ${FACTORY_WAVS}
++  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../tools/embed_factory_audio.py" ${FACTORY_WAVS}
++  VERBATIM)
++
+ add_executable(${EXECUTABLE_NAME}
++  "${FACTORY_AUDIO}"
+   main.cpp
+   midi_manager.cpp
+   sysex_handler.cpp
+diff --git a/drum/audio_engine.cpp b/drum/audio_engine.cpp
+index 04601c2..278c5eb 100644
+--- a/drum/audio_engine.cpp
++++ b/drum/audio_engine.cpp
+@@ -1,6 +1,7 @@
+ #include "audio_engine.h"
+ 
+ #include "config.h"
++#include "factory_audio.h"
+ #include "musin/audio/audio_output.h"
+ #include "musin/hal/debug_utils.h"
+ #include "sample_repository.h"
+@@ -37,9 +38,25 @@ float map_value_breakpoint(float normalized_value, float min_val,
+   }
+ }
+ 
++// Half an octave down to an octave up, original pitch in the middle.
++// The slider has no detent and near the middle a semitone is 4 % of its
++// travel, so "about the middle" by eye played the kit most of a semitone off
++// its tuning (measured 19.11.2026: a slider at 55 % gave +129 cents). The
++// middle 12 % of the travel now plays the samples exactly as they are, and
++// the rest of the travel covers the same range as before.
+ float map_value_pitch_fast(float normalized_value) {
+   normalized_value = std::clamp(normalized_value, 0.0f, 1.0f);
+-  return 0.5f + normalized_value * (0.5f + normalized_value);
++  constexpr float centre = 0.5f;
++  constexpr float flat_half_width = 0.06f;
++  const float offset = normalized_value - centre;
++  const float distance = std::fabs(offset);
++  if (distance <= flat_half_width) {
++    return 1.0f;
++  }
++  const float stretched =
++      (distance - flat_half_width) * (centre / (centre - flat_half_width));
++  const float value = centre + std::copysign(stretched, offset);
++  return 0.5f + value * (0.5f + value);
+ }
+ 
+ float map_value_filter_fast(float normalized_value) {
+@@ -57,20 +74,50 @@ void __not_in_flash_func(AudioEngine::Voice::fill_buffer)(
+     AudioBlock &out_samples) {
+   sound.fill_buffer(out_samples);
+ 
+-  if (!decay_active) {
+-    return;
++  if (decay_active) {
++    uint32_t position = frames_rendered;
++    for (int16_t &sample : out_samples) {
++      float gain = 0.0f;
++      if (position < decay_end_frame) {
++        gain = static_cast<float>(decay_end_frame - position) * decay_scale;
++      }
++      sample = static_cast<int16_t>(static_cast<float>(sample) * gain);
++      ++position;
++    }
++    frames_rendered = position;
+   }
+ 
+-  uint32_t position = frames_rendered;
+-  for (int16_t &sample : out_samples) {
+-    float gain = 0.0f;
+-    if (position < decay_end_frame) {
+-      gain = static_cast<float>(decay_end_frame - position) * decay_scale;
++  // What the listener last heard from this voice, for the next retrigger.
++  // Taken before the de-click ramp is added, so it never feeds on itself.
++  const int16_t newest = out_samples[out_samples.size() - 1];
++
++  if (residual_frames > 0) {
++    for (int16_t &sample : out_samples) {
++      if (residual_frames == 0) {
++        break;
++      }
++      int32_t value = sample + (residual_q8 >> 8);
++      if (value > 32767) {
++        value = 32767;
++      } else if (value < -32768) {
++        value = -32768;
++      }
++      sample = static_cast<int16_t>(value);
++      residual_q8 -= residual_step_q8;
++      --residual_frames;
+     }
+-    sample = static_cast<int16_t>(static_cast<float>(sample) * gain);
+-    ++position;
+   }
+-  frames_rendered = position;
++  // Still fading at the end of the block: a retrigger now starts from here
++  int32_t heard = newest;
++  if (residual_frames > 0) {
++    heard += residual_q8 >> 8;
++  }
++  if (heard > 32767) {
++    heard = 32767;
++  } else if (heard < -32768) {
++    heard = -32768;
++  }
++  last_output = static_cast<int16_t>(heard);
+ }
+ 
+ AudioEngine::AudioEngine(const SampleRepository &repository,
+@@ -124,7 +171,10 @@ void AudioEngine::process() {
+ }
+ 
+ void AudioEngine::play_on_voice(uint8_t voice_index, size_t sample_index,
+-                                uint8_t velocity) {
++                                uint8_t velocity, size_t fallback_index) {
++  if (fallback_index == NO_FALLBACK) {
++    fallback_index = sample_index;
++  }
+   musin::hal::DebugUtils::ScopedProfile p(
+       musin::hal::DebugUtils::g_section_profiler,
+       static_cast<size_t>(ProfileSection::PLAY_ON_VOICE_UPDATE));
+@@ -142,14 +192,27 @@ void AudioEngine::play_on_voice(uint8_t voice_index, size_t sample_index,
+   Voice &voice = voices_[voice_index];
+ 
+   if (!slot_manager_.voice_has_sample(voice_index, sample_index)) {
+-    auto path_opt = sample_repository_.get_path(sample_index);
+-    if (path_opt.has_value() &&
+-        slot_manager_.request_load(voice_index, sample_index, *path_opt)) {
+-      // The voice may still be sounding from the buffer being overwritten;
+-      // keep the interrupt-driven render out while it is replaced.
+-      const uint32_t saved_irq = save_and_disable_interrupts();
++    bool staged = false;
++    if (sample_index >= SampleRepository::MAX_SAMPLES) {
++      const auto pcm = factory_sound(sample_index - SampleRepository::MAX_SAMPLES);
++      staged = slot_manager_.stage_pcm(voice_index, sample_index, pcm);
++    } else if (auto path = sample_repository_.get_path(sample_index)) {
++      staged = slot_manager_.request_load(voice_index, sample_index, *path);
++    }
++    // A slot the second kit does not have falls back to the first kit's sound
++    if (!staged && fallback_index != sample_index &&
++        !slot_manager_.voice_has_sample(voice_index, fallback_index)) {
++      auto fallback_path = sample_repository_.get_path(fallback_index);
++      if (fallback_path.has_value()) {
++        staged = slot_manager_.request_load(voice_index, fallback_index,
++                                            *fallback_path);
++      }
++    }
++    if (staged) {
++      // Only the main loop owns these descriptors. The interrupt keeps
++      // reading its old buffer until reader.set_source() below. No other
++      // load can reuse that buffer before the retrigger is complete.
+       slot_manager_.commit_staging();
+-      restore_interrupts(saved_irq);
+     }
+     // On load failure the voice keeps its current sample.
+   }
+@@ -179,6 +242,18 @@ void AudioEngine::play_on_voice(uint8_t voice_index, size_t sample_index,
+   // The render runs in the DMA interrupt; keep it from reading the voice
+   // mid-retrigger.
+   const uint32_t saved_irq = save_and_disable_interrupts();
++  // A retrigger cuts the sound that is still playing. Carry the level it was
++  // cut at over into the new sound and fade it out in about 2 ms, instead of
++  // letting the output jump (stock: a click on fast repeats and rolls).
++  constexpr uint32_t DECLICK_FRAMES = 96;
++  float carried = static_cast<float>(voice.last_output) * voice.mixer_gain;
++  carried = (gain > 0.001f) ? carried / gain : 0.0f;
++  carried = std::clamp(carried, -32767.0f, 32767.0f);
++  voice.residual_q8 = static_cast<int32_t>(carried * 256.0f);
++  voice.residual_step_q8 =
++      voice.residual_q8 / static_cast<int32_t>(DECLICK_FRAMES);
++  voice.residual_frames = (voice.residual_step_q8 != 0) ? DECLICK_FRAMES : 0;
++  voice.mixer_gain = gain;
+   voice.reader.set_source(slot_manager_.voice_data(voice_index),
+                           slot_manager_.voice_length(voice_index));
+   mixer_.gain(voice_index, gain);
+@@ -246,19 +321,36 @@ void AudioEngine::unmute() {
+ }
+ 
+ void AudioEngine::set_filter_frequency(float normalized_value) {
+-
+-  const float freq = map_value_filter_fast(normalized_value);
+-  lowpass_.filter.frequency(freq);
++  filter_frequency_hz_ = map_value_filter_fast(normalized_value);
++  apply_filter();
+ }
+ void AudioEngine::set_filter_resonance(float normalized_value) {
+   normalized_value = std::clamp(normalized_value, 0.0f, 1.0f);
+-  const float resonance = map_value_linear(normalized_value, 0.7f, 3.0f);
++  filter_resonance_ = map_value_linear(normalized_value, 0.7f, 3.0f);
++  apply_filter();
++}
++// Opened above about 16 kHz with a resonance under 0.9, the filter turns
++// into continuous full-scale noise that outlasts the sound (measured on the
++// instrument 19.11.2026: CC 74 at 0-8 with CC 75 at 0-8). The panel cannot
++// ask for that, its one knob moves both together; MIDI can. Keep the
++// resonance up when the filter is that far open.
++void AudioEngine::apply_filter() {
++  float resonance = filter_resonance_;
++  if (filter_frequency_hz_ > 12000.0f) {
++    const float t = std::min((filter_frequency_hz_ - 12000.0f) / 3000.0f, 1.0f);
++    resonance = std::max(resonance, std::lerp(0.7f, 1.0f, t));
++  }
++  lowpass_.filter.frequency(filter_frequency_hz_);
+   lowpass_.filter.resonance(resonance);
+ }
+ void AudioEngine::set_crush_rate(float normalized_value) {
+   const float inverted_value = 1.0f - std::clamp(normalized_value, 0.0f, 1.0f);
++  // Top of the range is the full sample rate, so the crusher is truly off
++  // with the knob at zero. Stock topped out at 22050 Hz, which the crusher
++  // rounds to "hold every second sample": the output lost everything above
++  // 11 kHz and aliased, even with no crush dialled in.
+   const float rate =
+-      map_value_breakpoint(inverted_value, 882.0f, 2205.0f, 22050.0f);
++      map_value_breakpoint(inverted_value, 882.0f, 2205.0f, 44100.0f);
+   crusher_.sampleRate(rate);
+ }
+ 
+@@ -269,9 +361,18 @@ void AudioEngine::set_crush_depth(float normalized_value) {
+ }
+ 
+ void AudioEngine::notification(drum::Events::NoteEvent event) {
+-  // Direct mapping: MIDI note = sample slot
+-  size_t sample_id = event.note;
+-  play_on_voice(event.track_index, sample_id, event.velocity);
++  if (kit_ == 2 && event.note >= FACTORY_FIRST_NOTE &&
++      event.note < FACTORY_FIRST_NOTE + FACTORY_SOUND_COUNT) {
++    // Use a cache identity outside all writable sample slots.
++    const size_t id = SampleRepository::MAX_SAMPLES + event.note - FACTORY_FIRST_NOTE;
++    play_on_voice(event.track_index, id, event.velocity);
++    return;
++  }
++  // Editable kits keep their original storage and MIDI note numbers.
++  const size_t base_id = event.note;
++  const size_t sample_id =
++      base_id + static_cast<size_t>(kit_) * KIT_SLOT_STRIDE;
++  play_on_voice(event.track_index, sample_id, event.velocity, base_id);
+ }
+ 
+ } // namespace drum
+diff --git a/drum/audio_engine.h b/drum/audio_engine.h
+index 47ef0ac..ced50e3 100644
+--- a/drum/audio_engine.h
++++ b/drum/audio_engine.h
+@@ -48,6 +48,14 @@ private:
+     float decay_scale = 0.0f; // 1 / decay_end_frame
+     uint32_t frames_rendered = 0;
+ 
++    // De-click for a retrigger: the level the previous sound was cut off at
++    // (in Q8, already scaled to the new gain) fades to zero under the new one.
++    int32_t residual_q8 = 0;
++    int32_t residual_step_q8 = 0;
++    uint32_t residual_frames = 0;
++    int16_t last_output = 0;
++    float mixer_gain = 0.0f;
++
+     Voice();
+ 
+     void fill_buffer(AudioBlock &out_samples) override;
+@@ -90,7 +98,7 @@ public:
+    * @param velocity Playback velocity (0-127), affecting volume.
+    */
+   void play_on_voice(uint8_t voice_index, size_t sample_index,
+-                     uint8_t velocity);
++                     uint8_t velocity, size_t fallback_index = NO_FALLBACK);
+ 
+   /**
+    * @brief Stops playback on a specific voice/track immediately by setting
+@@ -172,7 +180,19 @@ public:
+    */
+   void notification(drum::Events::NoteEvent event) override;
+ 
++  /**
++   * @brief Selects the sample kit. Kit 0 plays slot = MIDI note (30-61),
++   * kit 1 plays slots 62–93, and kit 2 plays the embedded factory WAVs. A slot the second
++   * kit lacks falls back to the first kit's.
++   */
++  void set_kit(uint8_t kit) {
++    kit_ = kit;
++  }
++  static constexpr size_t KIT_SLOT_STRIDE = 32;
++  static constexpr size_t NO_FALLBACK = static_cast<size_t>(-1);
++
+ private:
++  uint8_t kit_ = 0;
+   const SampleRepository &sample_repository_;
+   SampleSlotManager &slot_manager_;
+   musin::Logger &logger_;
+@@ -184,6 +204,10 @@ private:
+   musin::audio::Lowpass lowpass_;
+   musin::audio::Highpass highpass_;
+ 
++  void apply_filter();
++  float filter_frequency_hz_ = 20000.0f;
++  float filter_resonance_ = 3.0f;
++
+   // profiler_ member is removed, ProfileSection enum remains for use with the
+   // global profiler
+   enum class ProfileSection {
+diff --git a/drum/config.h b/drum/config.h
+index 38eef2e..5b856f8 100644
+--- a/drum/config.h
++++ b/drum/config.h
+@@ -199,6 +199,8 @@ namespace timing {
+ // Anchors remain at 0 and 6; the controller applies +SWING_OFFSET_PHASES
+ // to the next step when that step is marked as swung.
+ constexpr uint8_t SWING_OFFSET_PHASES = 2; // valid range: 1..5
++// Light swing: one phase late, 58 % instead of the 67 % triplet feel
++constexpr uint8_t SWING_LIGHT_OFFSET_PHASES = 1;
+ static_assert(SWING_OFFSET_PHASES > 0 && SWING_OFFSET_PHASES < 6,
+               "SWING_OFFSET_PHASES must be between 1 and 5 at 12 PPQN");
+ } // namespace timing
+diff --git a/drum/main.cpp b/drum/main.cpp
+index da32ac3..65d811e 100644
+--- a/drum/main.cpp
++++ b/drum/main.cpp
+@@ -103,6 +103,38 @@ static drum::PizzaControls pizza_controls(pizza_display, tempo_handler,
+                                           sequencer_controller, message_router,
+                                           system_state_machine, logger);
+ 
++// The kit and the double-time tracks can be changed from the panel and over
++// SysEx (the settings). Both take effect at once. SettingsManager writes them
++// to flash only while the sequencer is stopped, because a write holds up the
++// main loop, and tries again if a write fails.
++static void sync_kit_setting() {
++  static uint8_t seen = 0xFF;
++  const uint8_t setting_kit = settings.get(drum::settings::Id::Kit);
++  const uint8_t panel_kit = sequencer_controller.get_kit();
++  if (seen == 0xFF || setting_kit != seen) {
++    sequencer_controller.set_kit(setting_kit);
++    seen = setting_kit;
++  } else if (panel_kit != seen) {
++    settings_manager.set(drum::settings::Id::Kit, panel_kit);
++    seen = panel_kit;
++  }
++  audio_engine.set_kit(sequencer_controller.get_kit());
++}
++
++static void sync_double_time_setting() {
++  static uint8_t seen = 0xFF;
++  const uint8_t setting_mask =
++      settings.get(drum::settings::Id::DoubleTimeTracks);
++  const uint8_t panel_mask = sequencer_controller.get_double_time_mask();
++  if (seen == 0xFF || setting_mask != seen) {
++    sequencer_controller.set_double_time_mask(setting_mask);
++    seen = setting_mask;
++  } else if (panel_mask != seen) {
++    settings_manager.set(drum::settings::Id::DoubleTimeTracks, panel_mask);
++    seen = panel_mask;
++  }
++}
++
+ int main() {
+   stdio_usb_init();
+ 
+@@ -168,6 +200,26 @@ int main() {
+ 
+   // Connect SysExHandler to SequencerController for sequencer state transfer
+   sysex_handler.set_sequencer_state_access(&sequencer_controller);
++  sysex_handler.set_panel_control_handler([](uint8_t control, uint8_t value) {
++    if (system_state_machine.get_current_state() != drum::SystemStateId::Sequencer) {
++      return false;
++    }
++    if (control == 0 && value <= 1) {
++      if (sequencer_controller.is_running() != (value != 0)) {
++        sequencer_controller.toggle();
++      }
++      return true;
++    }
++    if (control == 1) {
++      pizza_controls.analog_component.handle_control_change(FILTER, value / 127.0f);
++      return true;
++    }
++    if (control == 2 && value == 0) {
++      pizza_controls.analog_component.restore_filter_from_panel();
++      return true;
++    }
++    return false;
++  });
+ 
+   // A completed SDS sample transfer must drop any RAM copy of the slot so
+   // the rewritten file is re-read from flash (issue #572).
+@@ -260,6 +312,10 @@ int main() {
+       sync_in.update(now);
+       sequencer_controller
+           .update(); // Checks if a step is due and queues NoteEvents
++      sync_double_time_setting();
++      sync_kit_setting();
++      settings_manager.set_write_allowed(!sequencer_controller.is_running());
++      settings_manager.update(to_ms_since_boot(now));
+       message_router
+           .update(); // Drains NoteEvent queue, sending to observers and MIDI
+       audio_engine.process();
+diff --git a/drum/message_router.cpp b/drum/message_router.cpp
+index 0c46a78..8319c95 100644
+--- a/drum/message_router.cpp
++++ b/drum/message_router.cpp
+@@ -115,6 +115,10 @@ MessageRouter::MessageRouter(
+ }
+ 
+ void MessageRouter::set_output_mode(OutputMode mode) {
++  if (mode != _output_mode) {
++    pending_filter_.fill(CC_UNSET);
++    sent_filter_.fill(CC_UNSET);
++  }
+   _output_mode = mode;
+ }
+ 
+@@ -162,7 +166,11 @@ void MessageRouter::set_parameter(Parameter param_id, float value,
+       uint8_t midi_value = static_cast<uint8_t>(std::round(value * 127.0f));
+       midi_value = std::min(midi_value, static_cast<uint8_t>(127));
+ 
+-      _midi_sender.sendControlChange(midi_channel, cc_number, midi_value);
++      if (cc_number == 74 || cc_number == 75) {
++        pending_filter_[cc_number - 74] = midi_value;
++      } else {
++        _midi_sender.sendControlChange(midi_channel, cc_number, midi_value);
++      }
+       // TODO: Future enhancement - Add logic here to send 14-bit CC if desired
+     }
+   }
+@@ -235,6 +243,22 @@ void MessageRouter::update() {
+           drum::config::MAX_NOTE_EVENT_OBSERVERS>::notify_observers(event);
+     }
+   }
++
++  if (_output_mode == OutputMode::AUDIO) return;
++  const uint32_t now = to_ms_since_boot(get_absolute_time());
++  if (now - last_filter_ms_ < 20) return;
++  const uint8_t channel = settings_.get(settings::Id::MidiChannel);
++  if (channel != filter_channel_) {
++    sent_filter_.fill(CC_UNSET);
++    filter_channel_ = channel;
++  }
++  last_filter_ms_ = now;
++  for (size_t i = 0; i < pending_filter_.size(); ++i) {
++    if (pending_filter_[i] == CC_UNSET || pending_filter_[i] == sent_filter_[i]) continue;
++    if (_midi_sender.sendControlChange(channel, 74 + i, pending_filter_[i])) {
++      sent_filter_[i] = pending_filter_[i];
++    }
++  }
+ }
+ 
+ // --- MessageRouter Notification Implementation ---
+diff --git a/drum/message_router.h b/drum/message_router.h
+index 6083e4d..bf3f13d 100644
+--- a/drum/message_router.h
++++ b/drum/message_router.h
+@@ -193,6 +193,13 @@ private:
+   // Debouncing: track last trigger time for each note (indexed by note number
+   // 0-127)
+   std::array<uint32_t, 128> note_last_trigger_time_;
++
++  // Coalesce outgoing filter sweeps only. The audio engine receives every update.
++  static constexpr uint8_t CC_UNSET = 0xff;
++  std::array<uint8_t, 2> pending_filter_{CC_UNSET, CC_UNSET};
++  std::array<uint8_t, 2> sent_filter_{CC_UNSET, CC_UNSET};
++  uint32_t last_filter_ms_ = 0;
++  uint8_t filter_channel_ = 0;
+ };
+ 
+ } // namespace drum
+diff --git a/drum/pizza_controls.cpp b/drum/pizza_controls.cpp
+index 6fb4df4..c7c842f 100644
+--- a/drum/pizza_controls.cpp
++++ b/drum/pizza_controls.cpp
+@@ -199,6 +199,35 @@ void PizzaControls::KeypadComponent::KeypadEventHandler::handle_sample_select(
+     break;
+   }
+ 
++  // Both buttons of a track together: switch that track between 8th and
++  // 16th note steps. The first press already moved the sample; undo it.
++  auto &keys_down = parent->sample_keys_down_[pad_index];
++  const size_t key_slot = (offset > 0) ? 1 : 0;
++  if (event.type == musin::ui::KeypadEvent::Type::Press) {
++    keys_down[key_slot] = true;
++    // "Next sample" of tracks 1 and 2 together: switch to the other kit.
++    // The first of the two presses already moved its track on; move it back.
++    constexpr uint8_t KIT_CHORD_PADS[2] = {0, 1};
++    if (offset > 0 && (pad_index == KIT_CHORD_PADS[0] ||
++                       pad_index == KIT_CHORD_PADS[1])) {
++      const uint8_t other_pad = (pad_index == KIT_CHORD_PADS[0])
++                                    ? KIT_CHORD_PADS[1]
++                                    : KIT_CHORD_PADS[0];
++      if (parent->sample_keys_down_[other_pad][1]) {
++        controls->drumpad_component.select_note_for_pad(other_pad, -1);
++        controls->_sequencer_controller_ref.toggle_kit();
++        return;
++      }
++    }
++    if (keys_down[0] && keys_down[1]) {
++      controls->drumpad_component.select_note_for_pad(pad_index, offset);
++      controls->_sequencer_controller_ref.toggle_double_time(pad_index);
++      return;
++    }
++  } else if (event.type == musin::ui::KeypadEvent::Type::Release) {
++    keys_down[key_slot] = false;
++  }
++
+   if (event.type == musin::ui::KeypadEvent::Type::Press) {
+     // Existing press logic
+     controls->drumpad_component.select_note_for_pad(pad_index, offset);
+@@ -472,12 +501,14 @@ void PizzaControls::AnalogControlComponent::update(absolute_time_t now) {
+ 
+     // The smoothing logic is now always active, but since init ensures
+     // current == target, it won't ramp until the user moves the knob.
+-    if (std::fabs(filter_current_value_ - filter_target_value_) > 0.001f) {
++    if (filter_current_value_ != filter_target_value_) {
+       float alpha =
+           1.0f -
+           std::exp(-config::analog_controls::FILTER_SMOOTHING_RATE * dt_s);
+       filter_current_value_ =
+           std::lerp(filter_current_value_, filter_target_value_, alpha);
++      if (std::fabs(filter_current_value_ - filter_target_value_) <= 0.001f)
++        filter_current_value_ = filter_target_value_;
+       parent_controls->_message_router_ref.set_parameter(
+           drum::Parameter::FILTER_FREQUENCY, filter_current_value_);
+       parent_controls->_message_router_ref.set_parameter(
+@@ -486,6 +517,15 @@ void PizzaControls::AnalogControlComponent::update(absolute_time_t now) {
+   }
+ }
+ 
++void PizzaControls::AnalogControlComponent::restore_filter_from_panel() {
++  for (auto &control : mux_controls) {
++    if (control.get_id() == FILTER) {
++      handle_control_change(FILTER, control.get_value());
++      return;
++    }
++  }
++}
++
+ void PizzaControls::AnalogControlComponent::reset_repeat_state() {
+   // Clear repeat button state when transitioning from running to stopped
+   repeat_stopped_mode_active_ = false;
+@@ -500,19 +540,12 @@ void PizzaControls::AnalogControlComponent::handle_control_change(
+ 
+   switch (control_id) {
+   case FILTER:
+-    // For initialization, set current value directly.
+-    // For subsequent events, this just updates the target for smoothing.
+-    if (is_nil_time(last_smoothing_time_)) { // A proxy for initialization
++    filter_target_value_ = value;
++    if (is_nil_time(last_smoothing_time_)) {
+       filter_current_value_ = value;
++      controls->_message_router_ref.set_parameter(drum::Parameter::FILTER_FREQUENCY, value);
++      controls->_message_router_ref.set_parameter(drum::Parameter::FILTER_RESONANCE, 1.0f - value);
+     }
+-    filter_target_value_ = value;
+-    // The actual set_parameter for FILTER is handled in the update() smoothing
+-    // loop to create a smooth transition.
+-    // However, we must send the initial value directly.
+-    parent_controls->_message_router_ref.set_parameter(
+-        drum::Parameter::FILTER_FREQUENCY, value);
+-    parent_controls->_message_router_ref.set_parameter(
+-        drum::Parameter::FILTER_RESONANCE, (1.0f - value));
+     break;
+   case RANDOM:
+     parent_controls->_message_router_ref.set_parameter(
+@@ -523,14 +556,20 @@ void PizzaControls::AnalogControlComponent::handle_control_change(
+                                                        value);
+     break;
+   case SWING: {
+-    // Swing is ON/OFF with deterministic sign: right of center delays odd steps
++    // The swing control is a three-position switch: off in the middle.
++    // One side is the stock triplet swing. The other side, which in the stock
++    // firmware delayed the on-beats instead of the off-beats, is now a light
++    // swing of one phase (58 %). Both delay the off-beats.
+     float distance_from_center =
+         fabsf(value - config::analog_controls::SWING_KNOB_CENTER_VALUE);
+     bool swing_on = (distance_from_center >=
+                      config::analog_controls::SWING_ON_OFF_DEADBAND);
+-    bool delay_odd = (value > config::analog_controls::SWING_KNOB_CENTER_VALUE);
+-    // Remember the sign regardless of ON/OFF, so toggling later is stable
+-    controls->_sequencer_controller_ref.set_swing_target(delay_odd);
++    const bool heavy =
++        (value > config::analog_controls::SWING_KNOB_CENTER_VALUE);
++    controls->_sequencer_controller_ref.set_swing_offset(
++        heavy ? config::timing::SWING_OFFSET_PHASES
++              : config::timing::SWING_LIGHT_OFFSET_PHASES);
++    controls->_sequencer_controller_ref.set_swing_target(true);
+     controls->_sequencer_controller_ref.set_swing_enabled(swing_on);
+     // Forward raw value for UI feedback/telemetry if needed.
+     parent_controls->_message_router_ref.set_parameter(drum::Parameter::SWING,
+diff --git a/drum/pizza_controls.h b/drum/pizza_controls.h
+index 9cf63ed..4842247 100644
+--- a/drum/pizza_controls.h
++++ b/drum/pizza_controls.h
+@@ -106,6 +106,8 @@ public:
+ 
+   public:
+     etl::array<PadCyclingState, config::NUM_DRUMPADS> cycling_states_;
++    // Previous/next sample buttons currently down, per track
++    etl::array<etl::array<bool, 2>, config::NUM_DRUMPADS> sample_keys_down_{};
+     static constexpr etl::array<uint8_t, KEYPAD_TOTAL_KEYS> keypad_cc_map = [] {
+       etl::array<uint8_t, KEYPAD_TOTAL_KEYS> map{};
+       for (size_t i = 0; i < KEYPAD_TOTAL_KEYS; ++i) {
+@@ -181,6 +183,7 @@ public:
+     void update(absolute_time_t now);
+     void handle_control_change(uint16_t control_id, float value);
+     void reset_repeat_state();
++    void restore_filter_from_panel();
+ 
+   private:
+     struct AnalogControlEventHandler
+diff --git a/drum/sample_slot_manager.cpp b/drum/sample_slot_manager.cpp
+index 31a66c9..537ca8e 100644
+--- a/drum/sample_slot_manager.cpp
++++ b/drum/sample_slot_manager.cpp
+@@ -12,6 +12,19 @@ constexpr size_t MAX_PATH_LENGTH = 64;
+ }
+ 
+ SampleSlotManager::SampleSlotManager(musin::Logger &logger) : logger_(logger) {
++  for (size_t i = 0; i < NUM_VOICE_SLOTS; ++i) {
++    voice_slots_[i].buffer = &buffers_[i];
++  }
++  staging_.buffer = &buffers_[NUM_VOICE_SLOTS];
++}
++
++bool SampleSlotManager::stage_cached(uint8_t voice, size_t sample) {
++  if (!staging_.sample_index.has_value() || staging_.sample_index.value() != sample) {
++    return false;
++  }
++  staging_ready_ = true;
++  staging_voice_ = voice;
++  return true;
+ }
+ 
+ bool SampleSlotManager::request_load(uint8_t voice_index, size_t sample_index,
+@@ -20,7 +33,7 @@ bool SampleSlotManager::request_load(uint8_t voice_index, size_t sample_index,
+     return false;
+   }
+   if (voice_has_sample(voice_index, sample_index) ||
+-      staging_ready_for(voice_index, sample_index)) {
++      stage_cached(voice_index, sample_index)) {
+     return true;
+   }
+ 
+@@ -33,12 +46,33 @@ bool SampleSlotManager::request_load(uint8_t voice_index, size_t sample_index,
+   }
+ 
+   staging_ready_ = false;
+-  staging_length_ = static_cast<uint32_t>(
+-      fread(staging_buffer_.data(), sizeof(int16_t), MAX_SLOT_SAMPLES, file));
++  staging_.sample_index.reset();
++  staging_.length = static_cast<uint32_t>(
++      fread(staging_.buffer->data(), sizeof(int16_t), MAX_SLOT_SAMPLES, file));
++  const bool read_ok = staging_.length > 0 && ferror(file) == 0;
+   fclose(file);
++  if (!read_ok) {
++    return false;
++  }
+ 
+   staging_voice_ = voice_index;
+-  staging_sample_index_ = sample_index;
++  staging_.sample_index = sample_index;
++  staging_ready_ = true;
++  return true;
++}
++
++bool SampleSlotManager::stage_pcm(uint8_t voice, size_t sample,
++                                  std::span<const int16_t> pcm) {
++  if (voice >= NUM_VOICE_SLOTS || pcm.empty() || pcm.size() > MAX_SLOT_SAMPLES) {
++    return false;
++  }
++  if (stage_cached(voice, sample)) {
++    return true;
++  }
++  staging_.length = pcm.size();
++  std::copy(pcm.begin(), pcm.end(), staging_.buffer->begin());
++  staging_voice_ = voice;
++  staging_.sample_index = sample;
+   staging_ready_ = true;
+   return true;
+ }
+@@ -56,7 +90,8 @@ bool SampleSlotManager::voice_has_sample(uint8_t voice_index,
+ bool SampleSlotManager::staging_ready_for(uint8_t voice_index,
+                                           size_t sample_index) const {
+   return staging_ready_ && staging_voice_ == voice_index &&
+-         staging_sample_index_ == sample_index;
++         staging_.sample_index.has_value() &&
++         staging_.sample_index.value() == sample_index;
+ }
+ 
+ bool SampleSlotManager::staging_ready_for_voice(uint8_t voice_index) const {
+@@ -67,11 +102,7 @@ void SampleSlotManager::commit_staging() {
+   if (!staging_ready_) {
+     return;
+   }
+-  VoiceSlot &slot = voice_slots_[staging_voice_];
+-  std::copy(staging_buffer_.begin(), staging_buffer_.begin() + staging_length_,
+-            slot.buffer.begin());
+-  slot.length = staging_length_;
+-  slot.sample_index = staging_sample_index_;
++  std::swap(voice_slots_[staging_voice_], staging_);
+   staging_ready_ = false;
+ }
+ 
+@@ -82,7 +113,8 @@ void SampleSlotManager::invalidate_sample(size_t sample_index) {
+       slot.sample_index.reset();
+     }
+   }
+-  if (staging_ready_ && staging_sample_index_ == sample_index) {
++  if (staging_.sample_index.has_value() && staging_.sample_index.value() == sample_index) {
++    staging_.sample_index.reset();
+     staging_ready_ = false;
+   }
+ }
+@@ -91,7 +123,7 @@ const int16_t *SampleSlotManager::voice_data(uint8_t voice_index) const {
+   if (voice_index >= NUM_VOICE_SLOTS) {
+     return nullptr;
+   }
+-  return voice_slots_[voice_index].buffer.data();
++  return voice_slots_[voice_index].buffer->data();
+ }
+ 
+ uint32_t SampleSlotManager::voice_length(uint8_t voice_index) const {
+diff --git a/drum/sample_slot_manager.h b/drum/sample_slot_manager.h
+index 965fde9..96c749d 100644
+--- a/drum/sample_slot_manager.h
++++ b/drum/sample_slot_manager.h
+@@ -9,20 +9,18 @@
+ 
+ #include <cstddef>
+ #include <cstdint>
++#include <span>
+ 
+ namespace drum {
+ 
+ /**
+  * @brief Holds the audio data for all voices in RAM.
+  *
+- * Each voice owns a fixed buffer holding its current sample. A fifth
+- * staging buffer is loaded from the filesystem in one go (a sample file
+- * reads in a few milliseconds) and committed to the voice's own buffer
+- * with a RAM copy, either when the voice is triggered or when it falls
+- * idle.
+- *
+- * The audio path only ever reads the per-voice buffers; the filesystem
+- * is only touched by request_load(), on the main loop.
++ * Four voices and one staging slot share five fixed PCM buffers. Publishing
++ * a load exchanges two buffer descriptors. The staging slot retains the
++ * displaced sound until a different load needs the storage.
++ * Only the main loop loads and publishes sounds. The audio reader keeps
++ * its current buffer until the main loop assigns it a new source.
+  */
+ class SampleSlotManager {
+ public:
+@@ -49,6 +47,9 @@ public:
+   bool request_load(uint8_t voice_index, size_t sample_index,
+                     const etl::string_view &path);
+ 
++  // Copy factory PCM from read-only flash before the audio interrupt uses it.
++  bool stage_pcm(uint8_t voice, size_t sample, std::span<const int16_t> pcm);
++
+   /** @brief True if the voice's own buffer holds the given sample. */
+   bool voice_has_sample(uint8_t voice_index, size_t sample_index) const;
+ 
+@@ -60,7 +61,7 @@ public:
+   bool staging_ready_for_voice(uint8_t voice_index) const;
+ 
+   /**
+-   * @brief Copies the staged sample into the destination voice's buffer.
++   * @brief Gives the destination voice ownership of the staged buffer.
+    * Only valid when staging_ready_for_voice() is true. The staging buffer
+    * becomes free for the next load.
+    */
+@@ -83,19 +84,20 @@ private:
+   using SlotBuffer = etl::array<int16_t, MAX_SLOT_SAMPLES>;
+ 
+   struct VoiceSlot {
+-    SlotBuffer buffer;
++    SlotBuffer *buffer = nullptr;
+     uint32_t length = 0;
+     etl::optional<size_t> sample_index;
+   };
+ 
++  bool stage_cached(uint8_t voice_index, size_t sample_index);
++
+   musin::Logger &logger_;
++  etl::array<SlotBuffer, NUM_VOICE_SLOTS + 1> buffers_;
+   etl::array<VoiceSlot, NUM_VOICE_SLOTS> voice_slots_;
+ 
+-  SlotBuffer staging_buffer_;
++  VoiceSlot staging_;
+   bool staging_ready_ = false;
+   uint8_t staging_voice_ = 0;
+-  size_t staging_sample_index_ = 0;
+-  uint32_t staging_length_ = 0;
+ };
+ 
+ } // namespace drum
+diff --git a/drum/sequencer_controller.cpp b/drum/sequencer_controller.cpp
+index 04d18b3..a5de4fe 100644
+--- a/drum/sequencer_controller.cpp
++++ b/drum/sequencer_controller.cpp
+@@ -2,6 +2,7 @@
+ #include "config.h"
+ #include "events.h"
+ #include "pico/time.h"
++#include "musin/midi/midi_wrapper.h"
+ #include "sequencer_persistence.h"
+ #include <algorithm>
+ #include <cmath>
+@@ -104,6 +105,54 @@ void SequencerController<NumTracks, NumSteps>::set_swing_target(
+   swing_target_update_pending_ = true;
+ }
+ 
++template <size_t NumTracks, size_t NumSteps>
++void SequencerController<NumTracks, NumSteps>::set_swing_offset(
++    uint8_t phases) {
++  pending_swing_offset_ = phases;
++  swing_offset_update_pending_ = true;
++}
++
++template <size_t NumTracks, size_t NumSteps>
++void SequencerController<NumTracks, NumSteps>::set_double_time_mask(
++    uint8_t mask) {
++  double_time_mask_ = mask;
++}
++
++template <size_t NumTracks, size_t NumSteps>
++uint8_t SequencerController<NumTracks, NumSteps>::get_double_time_mask() const {
++  return double_time_mask_;
++}
++
++template <size_t NumTracks, size_t NumSteps>
++void SequencerController<NumTracks, NumSteps>::toggle_double_time(
++    uint8_t track_index) {
++  if (track_index < NumTracks) {
++    double_time_mask_ ^= static_cast<uint8_t>(1u << track_index);
++  }
++}
++
++/**
++ * The second 16th of a step, for double-time tracks only. A double-time
++ * track plays pattern step 2n on the step and 2n+1 here, so its eight steps
++ * go by twice per bar.
++ */
++template <size_t NumTracks, size_t NumSteps>
++void SequencerController<NumTracks, NumSteps>::process_half_step() {
++  const uint8_t mask = double_time_mask_;
++  const size_t num_steps = sequencer_.get().get_num_steps();
++  for (size_t track_idx = 0; track_idx < NumTracks; ++track_idx) {
++    if (((mask >> track_idx) & 1u) == 0) {
++      continue;
++    }
++    const size_t track_base = (last_base_step_index_ * 2 + 1) % num_steps;
++    auto randomized_step = random_effect_.calculate_randomized_step(
++        track_base, track_idx, num_steps, repeat_effect_.is_active());
++    track_states_[track_idx].just_played_step =
++        randomized_step.effective_step_index;
++    process_track_step(track_idx, randomized_step.effective_step_index);
++  }
++}
++
+ template <size_t NumTracks, size_t NumSteps>
+ bool SequencerController<NumTracks, NumSteps>::is_swing_enabled() const {
+   return swing_effect_.is_swing_enabled();
+@@ -160,6 +209,10 @@ void SequencerController<NumTracks, NumSteps>::start() {
+   tempo_source.set_playback_state(musin::timing::PlaybackState::PLAYING);
+ 
+   _running = true;
++  half_step_armed_ = false;
++  _half_step_is_due = false;
++  transport_announce_pending_ = tempo_source.get_clock_source() ==
++                                musin::timing::ClockSource::INTERNAL;
+ 
+   // To maintain swing timing, align the clock phase on restart.
+   const auto [anchor_phase, primed_phase] =
+@@ -170,6 +223,31 @@ void SequencerController<NumTracks, NumSteps>::start() {
+   }
+ }
+ 
++/**
++ * Tell MIDI followers that playback starts on this step, at this moment.
++ *
++ * Play resumes where the pattern stopped, so a bare Start would put a
++ * follower on its first step while we are somewhere else in the bar. Send
++ * the position first (a step is an 8th note, two MIDI beats) and Continue. The extra clock tick is
++ * the downbeat: by the MIDI spec a follower starts on the first tick after
++ * Start/Continue, and this step is sounding now, not one tick from now.
++ */
++template <size_t NumTracks, size_t NumSteps>
++void SequencerController<NumTracks, NumSteps>::announce_transport_start(
++    size_t step_index) {
++  // A plain Start only before the very first step since power-up or reset.
++  // Coming back to the first step after a stop is still a Continue, so a
++  // follower whose pattern is longer than ours keeps its own place
++  if (scheduled_step_counter_ == 0) {
++    MIDI::internal::_sendRealTime_actual(midi::Start);
++  } else {
++    MIDI::internal::_sendSongPosition_actual(
++        static_cast<unsigned>(step_index * 2));
++    MIDI::internal::_sendRealTime_actual(midi::Continue);
++  }
++  MIDI::internal::_sendRealTime_actual(midi::Clock);
++}
++
+ template <size_t NumTracks, size_t NumSteps>
+ void SequencerController<NumTracks, NumSteps>::stop() {
+   if (!_running) {
+@@ -178,6 +256,16 @@ void SequencerController<NumTracks, NumSteps>::stop() {
+   tempo_source.set_playback_state(musin::timing::PlaybackState::STOPPED);
+   tempo_source.remove_observer(*this);
+   _running = false;
++  // A step marked due but not yet played must not sound after Stop (stock
++  // left it pending: one more step could play and move the position on)
++  _step_is_due = false;
++  half_step_armed_ = false;
++  _half_step_is_due = false;
++  transport_announce_pending_ = false;
++  if (tempo_source.get_clock_source() ==
++      musin::timing::ClockSource::INTERNAL) {
++    MIDI::internal::_sendRealTime_actual(midi::Stop);
++  }
+ 
+   for (size_t track_idx = 0; track_idx < NumTracks; ++track_idx) {
+     if (track_states_[track_idx].last_played_note.has_value()) {
+@@ -216,6 +304,11 @@ void SequencerController<NumTracks, NumSteps>::notification(
+           pending_swing_target_delays_odd_.load(std::memory_order_relaxed));
+       swing_target_update_pending_.store(false, std::memory_order_relaxed);
+     }
++    if (swing_offset_update_pending_.load(std::memory_order_relaxed)) {
++      swing_effect_.set_swing_offset(
++          pending_swing_offset_.load(std::memory_order_relaxed));
++      swing_offset_update_pending_.store(false, std::memory_order_relaxed);
++    }
+   }
+ 
+   // event.phase_12 is guaranteed in [0, PPQN-1] by TempoHandler
+@@ -257,8 +350,31 @@ void SequencerController<NumTracks, NumSteps>::notification(
+         (expected_phase > last_phase_12_) && (expected_phase <= event.phase_12);
+   }
+ 
++  // The second 16th of the step that last played, for double-time tracks.
++  // Checked before the main step, so a late pass still plays them in order.
++  if (half_step_armed_) {
++    const bool half_due =
++        (event.phase_12 < last_phase_12_)
++            ? ((half_step_phase_ > last_phase_12_) ||
++               (half_step_phase_ <= event.phase_12))
++            : ((half_step_phase_ > last_phase_12_) &&
++               (half_step_phase_ <= event.phase_12));
++    if (half_due) {
++      half_step_armed_ = false;
++      _half_step_is_due = true;
++    }
++  }
++
+   if (is_step_due) {
++    if (transport_announce_pending_) {
++      transport_announce_pending_ = false;
++      announce_transport_start(next_index);
++    }
+     mark_step_due();
++    constexpr uint8_t SIXTEENTH_PHASES = 3;
++    half_step_phase_ = static_cast<uint8_t>(
++        (expected_phase + SIXTEENTH_PHASES) % musin::timing::DEFAULT_PPQN);
++    half_step_armed_ = true;
+   }
+ 
+   // --- Look-behind scheduling for retrigger substeps ---
+@@ -591,12 +707,18 @@ void SequencerController<NumTracks, NumSteps>::update() {
+     fade_traces(fade_ticks);
+   }
+ 
++  if (_half_step_is_due.exchange(false)) {
++    process_half_step();
++  }
++
+   if (!_step_is_due) {
+     return;
+   }
+   _step_is_due = false;
+ 
+   size_t base_step_index = calculate_base_step_index();
++  last_base_step_index_ = base_step_index;
++  const uint8_t double_time_mask = double_time_mask_;
+ 
+   for (auto &track_state : track_states_) {
+     track_state.just_played_step = std::nullopt;
+@@ -607,8 +729,11 @@ void SequencerController<NumTracks, NumSteps>::update() {
+   for (size_t track_idx = 0; track_idx < num_tracks; ++track_idx) {
+     // Calculate randomized step using the effect
+     const size_t num_steps = sequencer_.get().get_num_steps();
++    const bool is_double_time = ((double_time_mask >> track_idx) & 1u) != 0;
++    const size_t track_base =
++        is_double_time ? (base_step_index * 2) % num_steps : base_step_index;
+     auto randomized_step = random_effect_.calculate_randomized_step(
+-        base_step_index, track_idx, num_steps, repeat_effect_.is_active());
++        track_base, track_idx, num_steps, repeat_effect_.is_active());
+ 
+     size_t step_index_to_play_for_track = randomized_step.effective_step_index;
+ 
+diff --git a/drum/sequencer_controller.h b/drum/sequencer_controller.h
+index dadc02b..6a29e43 100644
+--- a/drum/sequencer_controller.h
++++ b/drum/sequencer_controller.h
+@@ -181,6 +181,34 @@ public:
+    */
+   void set_swing_target(bool delay_odd);
+ 
++  /**
++   * @brief Set how late swung steps play, in 12 PPQN phases (1 = light).
++   * Applied on the next downbeat, like the other swing settings.
++   */
++  void set_swing_offset(uint8_t phases);
++
++  /**
++   * @brief Tracks that run at double time: their eight steps play as 16th
++   * notes, twice per bar. One bit per track.
++   */
++  void set_double_time_mask(uint8_t mask);
++  [[nodiscard]] uint8_t get_double_time_mask() const;
++  void toggle_double_time(uint8_t track_index);
++
++  /**
++   * @brief Which sample kit plays. Kept here only because the panel reaches
++   * this class; main.cpp passes it on to the audio engine and the settings.
++   */
++  void set_kit(uint8_t kit) {
++    kit_ = kit;
++  }
++  [[nodiscard]] uint8_t get_kit() const {
++    return kit_;
++  }
++  void toggle_kit() {
++    kit_ = (get_kit() + 1) % 3;
++  }
++
+   /**
+    * @brief Check if swing timing is currently enabled.
+    * @return true if swing is enabled, false for straight timing
+@@ -342,6 +370,9 @@ private:
+   std::atomic<uint32_t> pending_trace_fade_ticks_{0};
+   musin::timing::TempoHandler &tempo_source;
+   bool _running = false;
++  // Set by start(): the first step that plays tells MIDI followers where we are
++  bool transport_announce_pending_ = false;
++  void announce_transport_start(size_t step_index);
+   std::atomic<bool> _step_is_due = false;
+   uint8_t last_phase_12_{0};
+ 
+@@ -361,6 +392,17 @@ private:
+   std::atomic<bool> pending_swing_enabled_{false};
+   std::atomic<bool> swing_target_update_pending_{false};
+   std::atomic<bool> pending_swing_target_delays_odd_{false};
++  std::atomic<bool> swing_offset_update_pending_{false};
++  std::atomic<uint8_t> pending_swing_offset_{2};
++
++  // Double time: the second 16th of each step
++  std::atomic<uint8_t> double_time_mask_{0};
++  std::atomic<uint8_t> kit_{0};
++  std::atomic<bool> _half_step_is_due = false;
++  bool half_step_armed_ = false;
++  uint8_t half_step_phase_ = 0;
++  size_t last_base_step_index_ = 0;
++  void process_half_step();
+ 
+   void create_persistent_state(SequencerPersistentState &state) const;
+   void apply_persistent_state(const SequencerPersistentState &state);
+diff --git a/drum/sequencer_effect_swing.cpp b/drum/sequencer_effect_swing.cpp
+index 06a8ae5..019fabc 100644
+--- a/drum/sequencer_effect_swing.cpp
++++ b/drum/sequencer_effect_swing.cpp
+@@ -26,7 +26,7 @@ uint8_t SequencerEffectSwing::onset_phase_for_parity(bool is_even) const {
+       swing_enabled_ && (swing_delays_odd_steps_ ? !is_even : is_even);
+   if (is_delayed) {
+     return static_cast<uint8_t>(
+-        (straight_phase + drum::config::timing::SWING_OFFSET_PHASES) % PPQN);
++        (straight_phase + swing_offset_phases_) % PPQN);
+   }
+   return straight_phase;
+ }
+@@ -44,7 +44,11 @@ SequencerEffectSwing::StepTiming SequencerEffectSwing::calculate_step_timing(
+   const bool is_delay_applied = expected_phase != straight_phase;
+ 
+   // Select appropriate retrigger mask based on swing state
+-  const uint32_t base_mask = swing_enabled_ ? TRIPLET_MASK : SIXTEENTH_MASK;
++  // Triplet retriggers only fit the full triplet swing; light swing keeps 16ths
++  const bool triplet_feel =
++      swing_enabled_ &&
++      swing_offset_phases_ >= drum::config::timing::SWING_OFFSET_PHASES;
++  const uint32_t base_mask = triplet_feel ? TRIPLET_MASK : SIXTEENTH_MASK;
+ 
+   // Rotate the mask by the expected phase to align retriggers with the main
+   // step
+@@ -91,6 +95,13 @@ bool SequencerEffectSwing::is_swing_enabled() const {
+   return swing_enabled_;
+ }
+ 
++void SequencerEffectSwing::set_swing_offset(uint8_t phases) {
++  if (phases < 1 || phases > 5) {
++    return;
++  }
++  swing_offset_phases_ = phases;
++}
++
+ void SequencerEffectSwing::set_swing_target(bool delay_odd) {
+   if (swing_delays_odd_steps_ == delay_odd) {
+     return;
+diff --git a/drum/sequencer_effect_swing.h b/drum/sequencer_effect_swing.h
+index 8808a13..fa42975 100644
+--- a/drum/sequencer_effect_swing.h
++++ b/drum/sequencer_effect_swing.h
+@@ -80,11 +80,18 @@ public:
+    */
+   void set_swing_target(bool delay_odd);
+ 
++  /**
++   * @brief Set how late a swung step plays.
++   * @param phases Delay in 12 PPQN phases, 1 (58 %) to 5
++   */
++  void set_swing_offset(uint8_t phases);
++
+ private:
+   [[nodiscard]] uint8_t onset_phase_for_parity(bool is_even) const;
+ 
+   bool swing_enabled_{false};
+   bool swing_delays_odd_steps_{true};
++  uint8_t swing_offset_phases_{2};
+ };
+ 
+ } // namespace drum
+diff --git a/drum/settings.h b/drum/settings.h
+index 219969e..6a2dd6a 100644
+--- a/drum/settings.h
++++ b/drum/settings.h
+@@ -17,6 +17,8 @@ namespace drum::settings {
+ enum class Id : uint8_t {
+   MidiChannel = 0x01,
+   SliderMode = 0x02,
++  DoubleTimeTracks = 0x03,
++  Kit = 0x04,
+ };
+ 
+ /**
+@@ -43,9 +45,13 @@ struct Descriptor {
+   uint8_t default_value;
+ };
+ 
+-inline constexpr etl::array<Descriptor, 2> DESCRIPTORS{{
++inline constexpr etl::array<Descriptor, 4> DESCRIPTORS{{
+     {Id::MidiChannel, "midi_channel", 1, 16, 10},
+     {Id::SliderMode, "slider_mode", 0, 7, slider_mode::PITCH},
++    // One bit per track: its eight steps play as 16th notes
++    {Id::DoubleTimeTracks, "double_time", 0, 15, 0},
++    // Keep existing wire IDs. Factory (embedded) comes first on a new installation.
++    {Id::Kit, "kit", 0, 2, 2},
+ }};
+ 
+ /**
+diff --git a/drum/settings_manager.cpp b/drum/settings_manager.cpp
+index 0fd1aee..c2570b2 100644
+--- a/drum/settings_manager.cpp
++++ b/drum/settings_manager.cpp
+@@ -11,6 +11,11 @@ constexpr size_t MAX_PATH_LENGTH = 64;
+ 
+ bool build_path(const settings::Descriptor &descriptor,
+                 char (&path)[MAX_PATH_LENGTH]) {
++  // First boot of the three-kit firmware starts in Factory. Keep the old
++  // two-kit preference available if the user rolls back the firmware.
++  if (descriptor.id == settings::Id::Kit) {
++    return snprintf(path, MAX_PATH_LENGTH, "%s/kit3", SETTINGS_DIR) > 0;
++  }
+   const int written = snprintf(path, MAX_PATH_LENGTH, "%s/%.*s", SETTINGS_DIR,
+                                static_cast<int>(descriptor.name.size()),
+                                descriptor.name.data());
+@@ -46,7 +51,39 @@ bool SettingsManager::set(settings::Id id, uint8_t value) {
+     logger_.warn("Settings: Value out of range", static_cast<uint32_t>(value));
+     return false;
+   }
+-  return persist_one(*descriptor, value);
++  const size_t index =
++      static_cast<size_t>(descriptor - settings::DESCRIPTORS.data());
++  unsaved_[index] = true;
++  if (write_allowed_ && persist_one(*descriptor, value)) {
++    unsaved_[index] = false;
++  }
++  return true;
++}
++
++void SettingsManager::update(uint32_t now_ms) {
++  if (!write_allowed_ || !has_unsaved() ||
++      (now_ms - last_attempt_ms_) < RETRY_INTERVAL_MS) {
++    return;
++  }
++  last_attempt_ms_ = now_ms;
++  for (size_t i = 0; i < settings::DESCRIPTORS.size(); ++i) {
++    if (!unsaved_[i]) {
++      continue;
++    }
++    const auto &descriptor = settings::DESCRIPTORS[i];
++    if (persist_one(descriptor, settings_.get(descriptor.id))) {
++      unsaved_[i] = false;
++    }
++  }
++}
++
++bool SettingsManager::has_unsaved() const {
++  for (const bool unsaved : unsaved_) {
++    if (unsaved) {
++      return true;
++    }
++  }
++  return false;
+ }
+ 
+ void SettingsManager::load_one(const settings::Descriptor &descriptor) {
+@@ -84,9 +121,9 @@ bool SettingsManager::persist_one(const settings::Descriptor &descriptor,
+   }
+ 
+   const size_t bytes_written = fwrite(&value, 1, 1, file);
+-  fclose(file);
++  const bool closed = (fclose(file) == 0);
+ 
+-  if (bytes_written != 1) {
++  if (bytes_written != 1 || !closed) {
+     logger_.error("Settings: Failed to write value");
+     return false;
+   }
+diff --git a/drum/settings_manager.h b/drum/settings_manager.h
+index 4e02b34..5c1e005 100644
+--- a/drum/settings_manager.h
++++ b/drum/settings_manager.h
+@@ -27,17 +27,42 @@ public:
+   [[nodiscard]] uint8_t get(settings::Id id) const;
+ 
+   /**
+-   * @brief Validates, applies and persists a setting value.
+-   * @return false for unknown ids, out-of-range values, or write failures.
++   * @brief Validates and applies a setting value, and marks it for saving.
++   *
++   * The value takes effect at once. It is written to flash right away only
++   * while writes are allowed (see set_write_allowed); otherwise, or if the
++   * write fails, update() saves it later.
++   * @return false for unknown ids and out-of-range values.
+    */
+   bool set(settings::Id id, uint8_t value);
+ 
++  /**
++   * @brief Says whether flash may be written now. A write holds up the main
++   * loop, so the caller forbids it while the sequencer is running.
++   */
++  void set_write_allowed(bool allowed) {
++    write_allowed_ = allowed;
++  }
++
++  /**
++   * @brief Saves values still waiting to be written, when writes are allowed.
++   * A failed write is tried again after a pause. Call from the main loop.
++   */
++  void update(uint32_t now_ms);
++
++  [[nodiscard]] bool has_unsaved() const;
++
+ private:
++  static constexpr uint32_t RETRY_INTERVAL_MS = 250;
++
+   void load_one(const settings::Descriptor &descriptor);
+   bool persist_one(const settings::Descriptor &descriptor, uint8_t value);
+ 
+   settings::Settings &settings_;
+   musin::Logger &logger_;
++  etl::array<bool, settings::DESCRIPTORS.size()> unsaved_{};
++  bool write_allowed_ = true;
++  uint32_t last_attempt_ms_ = 0;
+ };
+ 
+ } // namespace drum
+diff --git a/drum/sysex/protocol.h b/drum/sysex/protocol.h
+index 9e02c9c..750103c 100644
+--- a/drum/sysex/protocol.h
++++ b/drum/sysex/protocol.h
+@@ -93,6 +93,7 @@ template <typename FileOperations> struct Protocol {
+     RequestSequencerState = 0x30,
+     SequencerStateResponse = 0x31,
+     SetSequencerState = 0x32,
++    PanelControl = 0x33, // 0 play/stop, 1 filter, 2 return to physical filter
+ 
+     // Settings Commands (generic key-value, see drum/settings.h)
+     GetSetting = 0x40,
+@@ -108,6 +109,7 @@ template <typename FileOperations> struct Protocol {
+     PrintSerialNumber,
+     PrintStorageInfo,
+     PrintSequencerState,
++    PanelControl,
+     SetSequencerState,
+     GetSetting,
+     SetSetting,
+@@ -143,6 +145,9 @@ template <typename FileOperations> struct Protocol {
+     // SetSequencerState carries a raw 7-bit payload (see
+     // sequencer_state_codec.h); skip the legacy 3-to-16bit body decoding and
+     // let the handler read the payload directly from the chunk.
++    if (get_tag_from_chunk(chunk) == Tag::PanelControl) {
++      return Result::PanelControl;
++    }
+     if (get_tag_from_chunk(chunk) == Tag::SetSequencerState) {
+       return Result::SetSequencerState;
+     }
+diff --git a/drum/sysex_handler.cpp b/drum/sysex_handler.cpp
+index 4bfabb8..470188a 100644
+--- a/drum/sysex_handler.cpp
++++ b/drum/sysex_handler.cpp
+@@ -229,6 +229,14 @@ void SysExHandler::handle_sysex_message(const sysex::Chunk &chunk) {
+   case sysex::Protocol<StandardFileOps>::Result::Reboot:
+     reset_usb_boot(0, 0);
+     break;
++  case sysex::Protocol<StandardFileOps>::Result::PanelControl: {
++    using Tag = sysex::Protocol<StandardFileOps>::Tag;
++    constexpr size_t offset = sysex::SYSEX_CHUNK_PAYLOAD_OFFSET;
++    const bool ok = !is_busy() && chunk.size() == offset + 2 &&
++                    panel_control_handler_ && panel_control_handler_(chunk[offset], chunk[offset + 1]);
++    sender(ok ? Tag::Ack : Tag::Nack);
++    break;
++  }
+   case sysex::Protocol<StandardFileOps>::Result::PrintFirmwareVersion:
+     print_firmware_version();
+     break;
+diff --git a/drum/sysex_handler.h b/drum/sysex_handler.h
+index 4f007d5..b2eb4ec 100644
+--- a/drum/sysex_handler.h
++++ b/drum/sysex_handler.h
+@@ -49,6 +49,11 @@ public:
+ 
+   void on_file_received();
+ 
++  using PanelControlHandler = bool (*)(uint8_t, uint8_t);
++  void set_panel_control_handler(PanelControlHandler handler) {
++    panel_control_handler_ = handler;
++  }
++
+   /**
+    * @brief Gates BeginFirmwareUpdate. Disallowed while a trial-booted
+    * firmware has not yet committed itself.
+@@ -94,6 +99,7 @@ private:
+   sds::DumpSender<StandardFileOps> sds_dump_sender_;
+   musin::flash::FirmwareWriter firmware_writer_;
+   sysex::FirmwareUpdate<musin::flash::FirmwareWriter> firmware_update_;
++  PanelControlHandler panel_control_handler_ = nullptr;
+   bool new_file_received_ = false;
+   bool was_busy_ = false;
+   std::optional<uint8_t> last_notified_sample_slot_ = std::nullopt;
+diff --git a/musin/audio/mixer.h b/musin/audio/mixer.h
+index c4f7eca..b3fe5bf 100644
+--- a/musin/audio/mixer.h
++++ b/musin/audio/mixer.h
+@@ -102,10 +102,10 @@ template <size_t N> struct AudioMixer : ::BufferSource {
+     // Declare a temporary buffer locally within the function scope.
+     ::AudioBlock temp_buffer;
+ 
+-    // Zero out the output buffer first
++    // Accumulate all channels before clamping the final PCM value.
+     for (size_t sample_index = 0; sample_index < out_samples.size();
+          ++sample_index) {
+-      out_samples[sample_index] = 0;
++      accumulator[sample_index] = 0;
+     }
+ 
+     // Mix in each source
+@@ -118,17 +118,16 @@ template <size_t N> struct AudioMixer : ::BufferSource {
+ 
+           // Multiply sample by gain (multiplier is Q8.8, sample is Q1.15)
+           // Result is Q9.23. Shift right by 8 to get Q9.15
+-          // Add to the existing output sample (Q1.15)
+-          // Saturate the final result back to Q1.15 (int16_t)
+-          const int32_t value =
+-              out_samples[sample_index] +
+-              ((static_cast<int32_t>(temp_buffer[sample_index]) * multiplier) >>
+-               8);
+-          // Use the 16-bit saturation function from dspinst.h
+-          out_samples[sample_index] = signed_saturate_rshift16(value, 0);
++          accumulator[sample_index] +=
++              (static_cast<int32_t>(temp_buffer[sample_index]) * multiplier) >>
++              8;
+         }
+       }
+     }
++
++    for (size_t i = 0; i < out_samples.size(); ++i) {
++      out_samples[i] = saturate16(accumulator[i]);
++    }
+   }
+ 
+   void gain(unsigned int channel, float gain) {
+@@ -152,6 +151,9 @@ template <size_t N> struct AudioMixer : ::BufferSource {
+ private:
+   etl::array<::BufferSource *, N> sources;
+   etl::array<int16_t, N> multipliers;
++  // A member rather than a local: fill_buffer runs in the audio interrupt,
++  // on a small stack
++  etl::array<int32_t, AUDIO_BLOCK_SAMPLES> accumulator{};
+ };
+ 
+ } // namespace musin::audio
+diff --git a/musin/midi/midi_sender.cpp b/musin/midi/midi_sender.cpp
+index 0e94ac4..8d4ef20 100644
+--- a/musin/midi/midi_sender.cpp
++++ b/musin/midi/midi_sender.cpp
+@@ -32,18 +32,19 @@ void MidiSender::sendNoteOff(uint8_t channel, uint8_t note_number,
+   }
+ }
+ 
+-void MidiSender::sendControlChange(uint8_t channel, uint8_t controller,
++bool MidiSender::sendControlChange(uint8_t channel, uint8_t controller,
+                                    uint8_t value) {
+   if (_strategy == MidiSendStrategy::DIRECT_BYPASS_QUEUE) {
+     _logger.info("MIDI_SENDER: Direct ControlChange CC",
+                  static_cast<uint32_t>(controller));
+     _logger.info("MIDI_SENDER: CC value", static_cast<uint32_t>(value));
+     MIDI::internal::_sendControlChange_actual(channel, controller, value);
++    return true;
+   } else {
+     _logger.info("MIDI_SENDER: Queued ControlChange CC",
+                  static_cast<uint32_t>(controller));
+     _logger.info("MIDI_SENDER: CC value", static_cast<uint32_t>(value));
+-    enqueue_midi_message(OutgoingMidiMessage(channel, controller, value),
++    return enqueue_midi_message(OutgoingMidiMessage(channel, controller, value),
+                          _logger);
+   }
+ }
+diff --git a/musin/midi/midi_sender.h b/musin/midi/midi_sender.h
+index 0a16bfe..6f58574 100644
+--- a/musin/midi/midi_sender.h
++++ b/musin/midi/midi_sender.h
+@@ -17,7 +17,7 @@ public:
+ 
+   void sendNoteOn(uint8_t channel, uint8_t note_number, uint8_t velocity);
+   void sendNoteOff(uint8_t channel, uint8_t note_number, uint8_t velocity);
+-  void sendControlChange(uint8_t channel, uint8_t controller, uint8_t value);
++  bool sendControlChange(uint8_t channel, uint8_t controller, uint8_t value);
+   // Add other MIDI message types as needed (PitchBend, SysEx, RealTime)
+ 
+ private:
+diff --git a/musin/midi/midi_wrapper.h b/musin/midi/midi_wrapper.h
+index b6a3f47..611cc55 100644
+--- a/musin/midi/midi_wrapper.h
++++ b/musin/midi/midi_wrapper.h
+@@ -45,6 +45,9 @@ namespace internal {
+ // These functions perform the actual MIDI sending via underlying libraries.
+ // They are called by the midi_message_queue processor.
+ void _sendRealTime_actual(MidiType message);
++// Song Position Pointer, in MIDI beats (16th notes). Sent directly, like
++// the clock, so it keeps its place in front of Start/Continue.
++void _sendSongPosition_actual(unsigned beats);
+ void _sendControlChange_actual(uint8_t channel, uint8_t controller,
+                                uint8_t value);
+ void _sendNoteOn_actual(uint8_t channel, uint8_t note, uint8_t velocity);
+diff --git a/musin/ports/pico/port/midi_wrapper.cpp b/musin/ports/pico/port/midi_wrapper.cpp
+index d860d26..6c54622 100644
+--- a/musin/ports/pico/port/midi_wrapper.cpp
++++ b/musin/ports/pico/port/midi_wrapper.cpp
+@@ -170,6 +170,10 @@ void MIDI::internal::_sendRealTime_actual(const midi::MidiType message) {
+   }
+ }
+ 
++void MIDI::internal::_sendSongPosition_actual(const unsigned beats) {
++  ALL_TRANSPORTS(sendSongPosition(beats));
++}
++
+ void MIDI::internal::_sendControlChange_actual(const byte channel,
+                                                const byte controller,
+                                                const byte value) {
+diff --git a/musin/timing/clock_router.cpp b/musin/timing/clock_router.cpp
+index 867d928..fe99cc6 100644
+--- a/musin/timing/clock_router.cpp
++++ b/musin/timing/clock_router.cpp
+@@ -104,6 +104,10 @@ void ClockRouter::trigger_resync() {
+   }
+ }
+ 
++void ClockRouter::restart_internal_clock() {
++  internal_clock_.reset();
++}
++
+ void ClockRouter::set_sync_out(SyncOut *sync_out_ptr) {
+   sync_out_ = sync_out_ptr;
+ }
+diff --git a/musin/timing/clock_router.h b/musin/timing/clock_router.h
+index 106f5fc..5fd07fe 100644
+--- a/musin/timing/clock_router.h
++++ b/musin/timing/clock_router.h
+@@ -50,6 +50,9 @@ public:
+   void set_bpm(float bpm);
+   void trigger_resync();
+   void resync_sync_output();
++  // Restart the internal clock from now: the next tick comes one full
++  // interval later
++  void restart_internal_clock();
+   void set_sync_out(SyncOut *sync_out_ptr);
+ 
+   // Auto source switching
+diff --git a/musin/timing/speed_adapter.h b/musin/timing/speed_adapter.h
+index e9d7666..b28afc9 100644
+--- a/musin/timing/speed_adapter.h
++++ b/musin/timing/speed_adapter.h
+@@ -49,6 +49,12 @@ public:
+     return modifier_;
+   }
+ 
++  // Start counting raw ticks afresh, so the next downsampled tick comes a
++  // whole number of raw ticks after a manual resync
++  void reset_tick_counter() {
++    tick_counter_ = 0;
++  }
++
+   void notification(musin::timing::ClockEvent event) override;
+ 
+ private:
+diff --git a/musin/timing/tempo_handler.cpp b/musin/timing/tempo_handler.cpp
+index 53be931..9dd0efb 100644
+--- a/musin/timing/tempo_handler.cpp
++++ b/musin/timing/tempo_handler.cpp
+@@ -135,6 +135,12 @@ void TempoHandler::set_playback_state(PlaybackState new_state) {
+ void TempoHandler::trigger_manual_sync(uint8_t target_phase) {
+   switch (get_clock_source()) {
+   case ClockSource::INTERNAL:
++    // Restart our own clock from the button press. Steps then fall on whole
++    // clock ticks counted from the press, so MIDI and sync followers can
++    // lock to them exactly (stock: the first step came up to two ticks short)
++    clock_router_ref_.restart_internal_clock();
++    speed_adapter_ref_.reset_tick_counter();
++    [[fallthrough]];
+   case ClockSource::MIDI:
+     clock_router_ref_.resync_sync_output();
+     emit_manual_resync_event(target_phase);
+diff --git a/test/drum/sample_slot_manager_test.cpp b/test/drum/sample_slot_manager_test.cpp
+index 629d33c..6d19d7c 100644
+--- a/test/drum/sample_slot_manager_test.cpp
++++ b/test/drum/sample_slot_manager_test.cpp
+@@ -138,3 +138,41 @@ TEST_CASE("Missing file is reported as failure") {
+   REQUIRE_FALSE(manager.request_load(0, 3, "./does_not_exist.pcm"));
+   REQUIRE_FALSE(manager.staging_ready_for_voice(0));
+ }
++
++TEST_CASE("Displaced PCM can be replayed and invalidation forces a fresh load") {
++  drum::SampleSlotManager manager(logger);
++  const auto path = write_pcm_file("slot_test_evicted.pcm", 128, 71);
++  const int16_t alternate[] = {901, 902};
++  const int16_t hat[] = {47};
++  REQUIRE(manager.stage_pcm(3, 140, hat));
++  manager.commit_staging();
++  REQUIRE(manager.request_load(0, 33, path.c_str()));
++  manager.commit_staging();
++  REQUIRE(manager.stage_pcm(0, 131, alternate));
++  manager.commit_staging();
++  REQUIRE(remove(path.c_str()) == 0);
++  REQUIRE(manager.request_load(0, 33, path.c_str()));
++  REQUIRE(manager.voice_data(0)[0] == 901);
++  manager.commit_staging();
++  REQUIRE(manager.voice_data(0)[0] == 71);
++  REQUIRE(manager.voice_length(0) == 128);
++  REQUIRE(manager.stage_pcm(0, 131, alternate));
++  manager.commit_staging();
++  manager.invalidate_sample(33);
++  REQUIRE_FALSE(manager.request_load(0, 33, path.c_str()));
++  REQUIRE(manager.voice_data(0)[0] == 901);
++  REQUIRE(manager.voice_data(3)[0] == 47);
++}
++
++TEST_CASE("An empty PCM file leaves the playing sound available") {
++  drum::SampleSlotManager manager(logger);
++  const int16_t pcm[] = {17, 18};
++  REQUIRE(manager.stage_pcm(2, 45, pcm));
++  manager.commit_staging();
++  const auto path = write_pcm_file("slot_test_empty.pcm", 0, 0);
++  REQUIRE_FALSE(manager.request_load(2, 46, path.c_str()));
++  manager.commit_staging();
++  REQUIRE(manager.voice_has_sample(2, 45));
++  REQUIRE(manager.voice_length(2) == 2);
++  remove(path.c_str());
++}
+diff --git a/test/midi_test_support.cpp b/test/midi_test_support.cpp
+index 3a79009..be7a96d 100644
+--- a/test/midi_test_support.cpp
++++ b/test/midi_test_support.cpp
+@@ -63,6 +63,11 @@ bool MockMidiCallRecord::operator==(const MockMidiCallRecord &other) const {
+ 
+ // --- Mock MIDI::internal Function Implementations ---
+ namespace MIDI::internal {
++void _sendSongPosition_actual(unsigned beats) {
++  mock_midi_calls.emplace_back("_sendSongPosition_actual", 0, 0, 0,
++                               static_cast<int>(beats), ::midi::InvalidType,
++                               std::vector<uint8_t>{}, 0);
++}
+ void _sendNoteOn_actual(uint8_t channel, uint8_t note, uint8_t velocity) {
+   mock_midi_calls.push_back(MockMidiCallRecord::NoteOn(channel, note, velocity));
+ }
+diff --git a/tools/drumtool/drumtool.js b/tools/drumtool/drumtool.js
+index 18e9e0a..a6b348f 100755
+--- a/tools/drumtool/drumtool.js
++++ b/tools/drumtool/drumtool.js
+@@ -75,6 +75,8 @@ const SET_SETTING = 0x42;
+ const SETTINGS = {
+   midi_channel: { id: 0x01, min: 1, max: 16, description: 'MIDI channel for notes and CCs (1-16)' },
+   slider_mode: { id: 0x02, min: 0, max: 7, description: 'Track slider bit mask: 1=pitch, 2=gain, 4=decay (combinable)' },
++  double_time: { id: 0x03, min: 0, max: 15, description: 'Tracks whose steps play as 16th notes, bit mask: 1=track 1, 2=track 2, 4=track 3, 8=track 4 (duo-team build)' },
++  kit: { id: 0x04, min: 0, max: 2, description: 'Factory (2, embedded), Techno (0, 30-61), Organic (1, 62-93)' },
+ };
+ 
+ // Firmware Update Commands (UF2 streamed to the inactive A/B partition)
+diff --git a/drum/factory_audio.h b/drum/factory_audio.h
+new file mode 100644
+index 0000000..cd518c7
+--- /dev/null
++++ b/drum/factory_audio.h
+@@ -0,0 +1,12 @@
++#ifndef DRUM_FACTORY_AUDIO_H
++#define DRUM_FACTORY_AUDIO_H
++
++#include <cstdint>
++#include <span>
++
++namespace drum {
++constexpr unsigned FACTORY_FIRST_NOTE = 30;
++constexpr unsigned FACTORY_SOUND_COUNT = 32;
++std::span<const int16_t> factory_sound(unsigned index);
++} // namespace drum
++#endif
+diff --git a/tools/embed_factory_audio.py b/tools/embed_factory_audio.py
+new file mode 100644
+index 0000000..d5f6948
+--- /dev/null
++++ b/tools/embed_factory_audio.py
+@@ -0,0 +1,28 @@
++"""Build read-only PCM from the factory kit. Only the main loop reads flash."""
++import struct
++import sys
++import wave
++from pathlib import Path
++
++output = Path(sys.argv[1])
++paths = sorted(map(Path, sys.argv[2:]))
++if [int(path.name.split("_")[0]) for path in paths] != list(range(30, 62)):
++    raise ValueError("Expected exactly the 32 factory WAVs for notes 30 through 61")
++with output.open("w") as cpp:
++    cpp.write('#include "factory_audio.h"\nnamespace drum {\n')
++    for i, path in enumerate(paths):
++        with wave.open(str(path), "rb") as wav:
++            if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 44100):
++                raise ValueError(f"{path}: expected mono 16-bit 44100 Hz")
++            frames = wav.readframes(wav.getnframes())
++        pcm = struct.unpack(f"<{len(frames) // 2}h", frames)
++        cpp.write(f'const int16_t sound_{i}[] __attribute__((section(".flashdata.factory"))) = {{\n')
++        for j in range(0, len(pcm), 32):
++            cpp.write(",".join(map(str, pcm[j:j + 32])) + ",\n")
++        cpp.write("};\n")
++    cpp.write("static const std::span<const int16_t> sounds[] = {")
++    cpp.write(", ".join(f"sound_{i}" for i in range(len(paths))))
++    cpp.write("};\nstatic_assert(sizeof(sounds) / sizeof(sounds[0]) == FACTORY_SOUND_COUNT);\n")
++    cpp.write("std::span<const int16_t> factory_sound(unsigned index) {\n"
++              "  if (index >= FACTORY_SOUND_COUNT) return {};\n"
++              "  return sounds[index];\n}\n} // namespace drum\n")

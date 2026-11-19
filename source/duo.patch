@@ -1,0 +1,2158 @@
+diff --git a/Makefile b/Makefile
+index 528e75a..2a7c348 100644
+--- a/Makefile
++++ b/Makefile
+@@ -58,7 +58,7 @@ CXXFLAGS = -std=gnu++0x -felide-constructors -fno-exceptions -fno-rtti
+ CFLAGS =
+ 
+ # linker options
+-LDFLAGS = -O2 -Wl,--gc-sections,--defsym=__rtc_localtime=0 -mthumb
++LDFLAGS = -O2 -Wl,--gc-sections,--defsym=__rtc_localtime=0 -mthumb --specs=nosys.specs
+ 
+ # additional libraries to link
+ LIBS = -lm
+diff --git a/src/Changelog.md b/src/Changelog.md
+index 5747756..1d89b25 100644
+--- a/src/Changelog.md
++++ b/src/Changelog.md
+@@ -4,6 +4,93 @@ All notable changes to this project will be documented in this file.
+ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
+ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
+ 
++## [1.2.0-mt14] - 2026-11-19 (answers version 1.2.64)
++- Kick sidechain defaults to off. Hold Accent, tap and release Transpose Up to toggle it in any mode. Green means on, red means off. The choice is saved across restarts. The two-arrow mode chord still takes priority.
++- USB SysEx F0 7D 64 0E 00/01 F7 sets the same preference. Diagnostics append two bytes for sidechain state and clock source.
++
++## [1.2.0-mt13] - 2026-11-19 (answers version 1.2.63)
++### Fixed (found by recording both instruments through an audio interface, and by the third outside review)
++- Ducking under the DRUM's kick stepped the gain at an audio block boundary, a tick about 25 dB under the note. The dry voice now has its own gain stage that glides over 2.9 ms
++- A transpose button acts when it is let go, so pressing the two mode buttons one after the other never leaves the synth a semitone off. The further octave at either end of the range now needs a hold of 0.3 s
++
++## [1.2.0-mt12] - 2026-11-19 (answers version 1.2.62)
++### Added (from the second outside review)
++- Filter envelope with a decay: 8/120 ms to 50 % in techno, 13/150 ms to 55 % in organic (stock held the filter open while the note was held)
++- The dry voice ducks under the DRUM's kick (notes 30-37 on channel 10): -3 dB and 115 ms back in techno, -1.5 dB and 85 ms in organic
++- Accents per step: hold Accent while stopped and press a step. Plain / accented velocity 100/119 techno, 94/109 organic
++- Third mode, "organic east": the organic voice with harmonic minor keys. Organic itself now has the pentatonic keys
++- New start patterns for techno and organic
++
++### Changed
++- Voice, echo and reverb numbers of both voices; built-in hat sends less into the effect
++
++### Fixed
++- A key held across a mode switch released the wrong note and left the old one hanging
++- The first of the two mode buttons no longer transposes on the way; a held pair switches once
++- Waiting for the master's clock is dropped on Stop and on our own Play
++- Echo and reverb levels glide to their new values on a mode switch
++- The mode flash no longer depends on the millisecond counter not wrapping
++
++## [1.2.0-mt11] - 2026-11-19 (answers version 1.2.61)
++### Added
++- Second synth mode, "organic": D# harmonic minor keys, softer and darker voice, shorter echo, more reverb, its own start patterns. Both transpose buttons together switch modes; the keys flash blue (techno) or amber (organic). Stored in EEPROM. Sysex f0 7d 64 0d <mode> f7
++
++### Fixed (from an outside review)
++- Note pitch was cut down to whole hertz (stock): up to 17 cents flat in the bass
++- A write one element past the LED array at every power up, and out of range indexing for MIDI channels 11-16 (stock)
++- A MIDI Start or Continue no longer lets the internal clock play a step before the master's first clock; a position after a clock pause honours the tempo knob multiplier; Continue without a position resumes on the next clock instead of acting like the Play button
++- MIDI thru off: a device after the DUO got every clock twice
++- The cutoff calculation no longer runs with the audio interrupt held off
++
++## [1.2.0-mt10] - 2026-11-19 (answers version 1.2.60)
++### Changed
++- Sawtooth and pulse oscillators with band-limited steps (src/synth_blep). The stock ones alias: thin whistles above 6 kHz, heard most with detune and an open filter. Same pitch, level and pulse width as before
++
++## [1.2.0-mt9] - 2026-11-19 (answers version 1.2.59)
++### Fixed
++- Filter cutoff tops out at 780 Hz instead of 1.8 kHz. With the cutoff knob fully open and little resonance the filter overflowed and put out loud noise (mt1-mt8)
++
++## [1.2.0-mt8] - 2026-11-19 (answers version 1.2.58)
++### Changed
++- Speaker amp: wakes with the audio muted for 30 ms and then fades the sound in; fades out before it sleeps; sleeps after 2.5 s of silence. mt7 kept it on for a minute, which stopped most clicks but let the idle hum through
++
++## [1.2.0-mt6] - 2026-11-18 (answers version 1.2.56)
++### Changed
++- Following a Dato DRUM at half speed (tempo knob fully left): after its Stop and Play the pattern continues in the half it stopped in, not always in the first
++
++## [1.2.0-mt5] - 2026-11-18 (answers version 1.2.55)
++### Changed
++- MIDI input takes up to four messages per pass, so the first note after the master's Play is not late
++- Several MIDI clocks arriving between two passes of the main loop all count (stock dropped all but one)
++
++## [1.2.0-mt4] - 2026-11-18 (answers version 1.2.54)
++### Changed
++- The speaker amp stays on until the output has been quiet for a minute (4 seconds in mt4-mt6). It used to switch off after 50 ms, and fading echo and reverb tails made it click on and off
++
++## [1.2.0-mt3] - 2026-11-18 (answers version 1.2.53)
++### Added
++- Song Position Pointer followed by Continue starts at that place in the bar, over the MIDI socket and USB. Made for the Dato DRUM duo-team build, which resumes mid-pattern
++
++## [1.2.0-mt2] - 2026-11-18 (answers version 1.2.52)
++### Changed
++- When the MIDI clock stops for a second, tempo goes back to the knob (stock stayed a follower until power off)
++- Internal clock no longer runs about 3 % slow
++- MIDI Start over USB starts from the first step, like Start on the MIDI socket
++- Pressing Play while following an external clock: comes back in on the master's bar position (after a MIDI Start), and a press just after the beat plays that step at once
++
++## [1.2.0-mt1] - 2026-11-18 (melodic techno build, answers version 1.2.51)
++### Added
++- Space effect on the delay switch: delay at a dotted eighth of the current tempo with darker, thinner repeats, plus a reverb (src/effect_space)
++- Sysex f0 7d 64 0c f7 returns audio load figures
++- Four D# minor start patterns instead of random notes
++
++### Changed
++- Keys play D# natural minor instead of the pentatonic scale
++- Detune knob: octave below, fifth below, fourth below, unison detune (the -9 and -4 semitone zones are gone)
++- Filter cutoff is exponential, 40 Hz to 1.8 kHz (was linear 30-541 Hz); resonance goes up to 3.8 (was 3.2)
++- Amp attack 5 ms (was 2 ms) to stop the click on a note from silence
++- The stock delay was set to 440 ms but the library capped it at 337 ms; it is replaced by the space effect
++
+ ## [1.1.0-rc.5] - 2018-01-24 (from DUO SN 1168)
+ ### Changed
+ - Call midi_handle and sequencer_update only twice per loop
+diff --git a/src/Leds.h b/src/Leds.h
+index 9e669df..334c8fc 100644
+--- a/src/Leds.h
++++ b/src/Leds.h
+@@ -66,7 +66,9 @@ void led_init() {
+   // We're going to do a loopback test first to determine brightness
+   attachInterrupt(LED_CLK, led_data_received, CHANGE);
+   FastLED.clear();
+-  physical_leds[NUM_LEDS] = CRGB(0xff6805);
++  // Stock firmware set physical_leds[NUM_LEDS] here, one element past the end
++  // of the array. The frame it sent was black either way; only the memory
++  // behind the array got overwritten
+   FastLED.show();
+   
+   FastLED.clear();
+@@ -80,7 +82,10 @@ void led_init() {
+   #endif
+ 
+   // The key of the current MIDI channel lights up
+-  physical_leds[MIDI_CHANNEL+8] = COLORS[SCALE[MIDI_CHANNEL-1]%24];
++  // Only channels 1-10 have a key: stock indexed past both arrays for 11-16
++  if(MIDI_CHANNEL >= 1 && MIDI_CHANNEL <= 10) {
++    physical_leds[MIDI_CHANNEL+8] = COLORS[SCALE[MIDI_CHANNEL-1]%24];
++  }
+ 
+   FastLED.show();
+   delay(500);
+@@ -96,8 +101,34 @@ void led_init() {
+   }
+ }
+ 
++// Brief keyboard feedback for mode and sidechain changes.
++static uint32_t key_flash_colour = 0;
++static uint32_t key_flash_start = 0;
++
++void flash_keys(uint32_t colour) {
++  key_flash_colour = colour;
++  key_flash_start = millis();
++}
++
++void led_keys_update() {
++  static uint32_t shown_colour = 0;
++  static uint8_t shown_mode = 255;
++  if(key_flash_colour && (uint32_t)(millis() - key_flash_start) >= 700) {
++    key_flash_colour = 0;
++  }
++  if(key_flash_colour == shown_colour && shown_mode == synth_mode) {
++    return;
++  }
++  shown_colour = key_flash_colour;
++  shown_mode = synth_mode;
++  for(int i = 0; i < 10; i++) {
++    physical_leds[i+9] = key_flash_colour ? CRGB(key_flash_colour) : COLORS[SCALE[i]%24];
++  }
++}
++
+ // Updates the LED colour and brightness to match the stored sequence
+ void led_update() {
++  led_keys_update();
+   for (int l = 0; l < SEQUENCER_NUM_STEPS; l++) {
+     if (step_enable[l]) {
+       leds(l) = COLORS[step_note[l]%24];
+@@ -135,6 +166,19 @@ void led_update() {
+       }
+     }
+   }
++  // Stopped with Accent held: show which steps carry an accent
++  if(!sequencer_is_running && !digitalRead(ACCENT_PIN)) {
++    for (int l = 0; l < SEQUENCER_NUM_STEPS; l++) {
++      if(step_accent[l]) {
++        leds(l) = LED_WHITE;
++      } else if(step_enable[l]) {
++        leds(l) = COLORS[step_note[l]%24];
++        leds(l).fadeLightBy(190);
++      } else {
++        leds(l) = CRGB::Black;
++      }
++    }
++  }
+   FastLED.show();
+   analogWrite(ENV_LED, (peak1.read()*127.0f));
+   analogWrite(FILTER_LED, 1 + ((synth.filter*synth.filter) >> 13));
+diff --git a/src/MidiFunctions.h b/src/MidiFunctions.h
+index dd8e934..15d2f75 100644
+--- a/src/MidiFunctions.h
++++ b/src/MidiFunctions.h
+@@ -27,6 +27,9 @@
+   Returns f0 7d 64 major_version minor_version patch f7
+ 
+   Send    f0 7e 64 06 01 f7 to retrieve firmware version
++
++  Send    f0 7d 64 0c f7 to retrieve audio load figures (melodic techno build)
++  Send    f0 7d 64 0d <mode> f7 to select the synth mode: 0 techno, 1 organic
+   */
+ 
+ #define SYSEX_DATO_ID 0x7D
+@@ -39,6 +42,9 @@
+ #define SYSEX_SERIAL_NUMBER 0x02
+ #define SYSEX_REBOOT_BOOTLOADER 0x0B
+ #define SYSEX_SELFTEST 0x0A
++#define SYSEX_DIAGNOSTICS 0x0C
++#define SYSEX_SYNTH_MODE 0x0D
++#define SYSEX_DUCK_ENABLED 0x0E
+ 
+ const float MIDI_NOTE_FREQUENCY[127] = {
+   8.1757989156, 8.6619572180, 9.1770239974, 9.7227182413, 10.3008611535, 10.9133822323, 11.5623257097, 12.2498573744, 12.9782717994, 13.7500000000, 14.5676175474, 15.4338531643, 16.3515978313,
+@@ -70,15 +76,24 @@ void midi_handle_realtime(uint8_t type);
+ void midi_print_firmware_version();
+ void midi_print_serial_number();
+ void midi_print_identity();
++void midi_print_diagnostics();
+ float midi_note_to_frequency(int x);
+ void midi_usb_sysex(const uint8_t *data, uint16_t length, bool complete);
+ 
+ synth_parameters midi_parameters;
+ 
+ void midi_handle() {
+-  MIDI.read(MIDI_CHANNEL);
+-  // Run through the parameters, see if they have changed and then send out CC's
+-  usbMIDI.read(MIDI_CHANNEL);
++  // A master sends position, continue and the downbeat clock back to back.
++  // Take such a short burst in one go: one message per call, as in the stock
++  // firmware, made the first note after Play about 10 ms late
++  // All channels are read: besides our own notes, the DRUM's kick on its
++  // channel ducks the voice. The handlers sort the channels out
++  // The DIN parser consumes one byte and returns false for a partial CC.
++  for(uint8_t i = 0; i < 24 && Serial1.available() > 0; i++) {
++    MIDI.read(MIDI_CHANNEL_OMNI);
++  }
++  for(uint8_t i = 0; i < 4 && usbMIDI.read(0); i++) {
++  }
+ }
+ 
+ void midi_send_cc() {
+@@ -148,6 +163,10 @@ void midi_send_cc() {
+ 
+ void midi_init() {
+   MIDI.begin(MIDI_CHANNEL);
++  // The library echoes everything from MIDI in to MIDI out by default. The
++  // firmware already sends its own clock and transport there, so a device
++  // after the DUO got every clock twice
++  MIDI.turnThruOff();
+   MIDI.setHandleNoteOn(midi_note_on);
+   MIDI.setHandleNoteOff(midi_note_off);
+ 
+@@ -195,11 +214,17 @@ float midi_note_to_frequency(int x) {
+ }
+ 
+ void midi_note_on(uint8_t channel, uint8_t note, uint8_t velocity) {
+-  note_stack.NoteOn(note, velocity);
++  if(channel == MIDI_CHANNEL) {
++    note_stack.NoteOn(note, velocity);
++  } else if(channel == DRUM_MIDI_CHANNEL && note >= 30 && note <= 37 && velocity > 0) {
++    duck_trigger(velocity);
++  }
+ }
+ 
+ void midi_note_off(uint8_t channel, uint8_t note, uint8_t velocity) {
+-  note_stack.NoteOff(note);
++  if(channel == MIDI_CHANNEL) {
++    note_stack.NoteOff(note);
++  }
+ }
+ 
+ void midi_usb_sysex(const uint8_t *data, uint16_t length, bool complete) {
+@@ -218,6 +243,19 @@ void midi_usb_sysex(const uint8_t *data, uint16_t length, bool complete) {
+       case SYSEX_REBOOT_BOOTLOADER:
+         enter_dfu();
+         break;
++      case SYSEX_DIAGNOSTICS:
++        midi_print_diagnostics();
++        break;
++      case SYSEX_DUCK_ENABLED:
++        if(complete && length == 6 && data[4] <= 1) {
++          set_duck_enabled(data[4] != 0);
++        }
++        break;
++      case SYSEX_SYNTH_MODE:
++        if(length >= 6) {
++          set_synth_mode(data[4]);
++        }
++        break;
+     }
+   }
+   if(data[1] == SYSEX_UNIVERSAL_NONREALTIME_ID) {
+diff --git a/src/Pitch.h b/src/Pitch.h
+index 854321c..3fa5ff5 100644
+--- a/src/Pitch.h
++++ b/src/Pitch.h
+@@ -6,9 +6,18 @@
+ 
+   oscillator 1 is the master pitch. It's a pulse wave with variable pulse width
+   Oscillator 2 can be detuned in steps
++
++  Melodic techno build, detune knob zones (stock had -9 and -4 semitone zones,
++  which fall out of a minor key). The pulse oscillator sounds an octave below
++  the frequency it is set to, so against the pulse the sawtooth is:
++    0-200    in unison, slowly beating (set to note - 12)
++    200-400  a fourth above (note - 7)
++    400-600  a fifth above (note - 5)
++    600-850  an octave above, detuned 5 to 22 cents (note)
++    850-1023 the same while the saw fades out, leaving the pulse alone
+ */
+ 
+-const uint8_t DETUNE_OFFSET_SEMITONES[] = { 4,5,7,9 };
++const uint8_t DETUNE_OFFSET_SEMITONES[] = { 5,7 };
+ int detune_amount = 0;
+ uint32_t pitch_update_time = 0;
+ void pitch_update();
+@@ -32,20 +41,25 @@ void pitch_update() {
+ }
+ 
+ float detune(int note, int amount) { // amount goes from 0-1023
++  if (synth_mode == FACTORY_MODE) {
++    if (amount > 850) return midi_note_to_frequency(note) * (amount + 9000) / 10240.0f;
++    if (amount > 680) return midi_note_to_frequency(note - 4);
++    if (amount > 560) return midi_note_to_frequency(note - 5);
++    if (amount > 350) return midi_note_to_frequency(note - 7);
++    if (amount > 200) return midi_note_to_frequency(note - 9);
++    return midi_note_to_frequency(note - 12) * (20000 - amount) / 20000.0f;
++  }
+   if (amount > 850) {
+-    return midi_note_to_frequency(note) * (amount+9000)/10240.;
++    return midi_note_to_frequency(note) * 1.013f;
+   }
+-  if (amount > 680) {
+-    return midi_note_to_frequency(note - DETUNE_OFFSET_SEMITONES[0]);
++  if (amount > 600) {
++    return midi_note_to_frequency(note) * (1.003f + (amount - 600) * (0.010f / 250.0f));
+   }
+-  if (amount > 560) {
+-    return midi_note_to_frequency(note - DETUNE_OFFSET_SEMITONES[1]);
+-  }
+-  if (amount > 350) {
+-    return midi_note_to_frequency(note - DETUNE_OFFSET_SEMITONES[2]);
++  if (amount > 400) {
++    return midi_note_to_frequency(note - DETUNE_OFFSET_SEMITONES[0]);
+   }
+   if (amount > 200) {
+-    return midi_note_to_frequency(note - DETUNE_OFFSET_SEMITONES[3]);
++    return midi_note_to_frequency(note - DETUNE_OFFSET_SEMITONES[1]);
+   }
+   return midi_note_to_frequency(note - 12) * ( 20000 - amount )/20000.;
+ }
+diff --git a/src/Power.h b/src/Power.h
+index d618982..7f010c2 100644
+--- a/src/Power.h
++++ b/src/Power.h
+@@ -66,59 +66,113 @@ void power_off() {
+ }
+ 
+ /*
+-  Checks whether the audio amp needs to be on.
+-  This prevents idle noise from the speaker
++  The speaker amp is only on while there is sound: idle, it hums.
++
++  Switching it clicks if audio is already playing when it comes up, which is
++  exactly what happens when a note wakes it. Stock firmware slept after about
++  50 ms of silence and woke on the next note with a 5 ms fade, so the first
++  note after every short pause clicked.
++
++  Here the amp wakes first, with the audio still muted, and the sound fades in
++  once it is up. Going to sleep, the sound fades out first and the amp switches
++  off after that. With headphones plugged in the speaker amp stays off and
++  nothing is muted.
+  */
++#define AMP_ASLEEP 0
++#define AMP_WAKING 1
++#define AMP_AWAKE 2
++#define AMP_FADING_OUT 3
++
++const uint32_t AMP_HOLD_MS = 2500;      // quiet for this long: go to sleep
++const uint32_t AMP_WAKE_MUTE_MS = 30;   // amp powers up before any sound reaches it
++const float AMP_FADE_IN_MS = 12.0;
++const float AMP_FADE_OUT_MS = 20.0;
++
++uint8_t amp_state = AMP_ASLEEP;
++elapsedMillis amp_timer;
++
++static void amp_pin(bool on) {
++  if(on && !digitalRead(JACK_DETECT)) {
++    pinMode(AMP_ENABLE, OUTPUT);
++    digitalWrite(AMP_ENABLE, LOW);
++  } else {
++    pinMode(AMP_ENABLE, INPUT);
++  }
++}
++
+ void amp_update() {
+-  if(peak_update_time > peak_interval) {
+-
+-    audio_peak_values <<= 1;
+-    
+-    if(peak2.available()) {
+-      if(peak2.read() > 0.001f) {
+-        audio_peak_values |= 1UL;
+-      } else {
+-        audio_peak_values &= ~1UL;
+-      }
+-    } else {
+-      audio_peak_values &= ~1UL;
+-    }
++  static uint32_t last_audio_ms = 0;
++  bool loud = false;
+ 
+-    if((audio_peak_values == 0UL)) {
+-      amp_disable();
+-    } else {
+-      amp_enable();
++  if(peak_update_time <= peak_interval) {
++    return;
++  }
++  if(peak2.available()) {
++    loud = peak2.read() > 0.001f;
++    if(loud) {
++      last_audio_ms = millis();
+     }
+   }
++
++  switch(amp_state) {
++    case AMP_ASLEEP:
++      if(loud) {
++        if(digitalRead(JACK_DETECT)) {
++          // Headphones or line out: no speaker amp to wait for
++          pop_suppressor.fadeIn(2.0);
++          amp_state = AMP_AWAKE;
++        } else {
++          amp_pin(true);
++          amp_timer = 0;
++          amp_state = AMP_WAKING;
++        }
++      }
++      break;
++    case AMP_WAKING:
++      if(amp_timer >= AMP_WAKE_MUTE_MS) {
++        pop_suppressor.fadeIn(AMP_FADE_IN_MS);
++        amp_state = AMP_AWAKE;
++      }
++      break;
++    case AMP_AWAKE:
++      amp_pin(true); // follows the headphone jack
++      if((millis() - last_audio_ms) > AMP_HOLD_MS) {
++        pop_suppressor.fadeOut(AMP_FADE_OUT_MS);
++        amp_timer = 0;
++        amp_state = AMP_FADING_OUT;
++      }
++      break;
++    case AMP_FADING_OUT:
++      if(loud) {
++        pop_suppressor.fadeIn(5.0);
++        amp_state = AMP_AWAKE;
++      } else if(amp_timer >= (uint32_t)AMP_FADE_OUT_MS + 5) {
++        amp_pin(false);
++        amp_state = AMP_ASLEEP;
++      }
++      break;
++  }
+ }
++
++// Used at power up and power down: straight to sleep, the next sound wakes it
+ void amp_enable() {
+-  if(amp_enabled == 0) {
+-    amp_enabled = 1;
+-    pop_suppressor.fadeIn(5.0);
+-  }
+-  if(digitalRead(JACK_DETECT)) {
+-    pinMode(AMP_ENABLE, INPUT);
+-  } else {
+-    pinMode(AMP_ENABLE, OUTPUT);
+-    digitalWrite(AMP_ENABLE, LOW);
+-  }
+ }
++
+ void amp_disable() {
+-  if(amp_enabled == 1) {
+-    pop_suppressor.fadeOut(5.0);
+-    pinMode(AMP_ENABLE, INPUT);
+-    amp_enabled = 0;
+-  }
++  pop_suppressor.fadeOut(5.0);
++  amp_pin(false);
++  amp_state = AMP_ASLEEP;
++  amp_enabled = 0;
+ }
+ 
+ void power_on() {
+   amp_disable();
+-  midi_clock = 0;
++  tempo_handler.midi_clock_reset();
+   in_setup = true;
+   // Clear note stack
+   note_stack.Clear();
+   // Read the MIDI channel from EEPROM. Lowest four bits
+-  uint8_t stored_midi_channel = eeprom_read_byte(EEPROM_MIDI_CHANNEL & 0xf00);
++  uint8_t stored_midi_channel = eeprom_read_byte((const uint8_t*)(EEPROM_MIDI_CHANNEL & 0xf00));
+   midi_set_channel(stored_midi_channel);
+   keys_scan();
+   if(midi_get_channel() != stored_midi_channel) {
+diff --git a/src/Sequencer.h b/src/Sequencer.h
+index db9e3a3..e016d71 100644
+--- a/src/Sequencer.h
++++ b/src/Sequencer.h
+@@ -14,6 +14,30 @@ uint8_t step_note[] = { 1,0,6,9,0,4,0,5 };
+ uint8_t step_enable[] = { 1,0,1,1,1,1,0,1 };
+ uint8_t step_velocity[] = { 100,100,100,100,100,100,100,100 };
+ 
++#define INITIAL_PATTERN_COUNT 4
++// Start patterns, four per synth mode: eight notes and which steps are on
++// (first step in the highest bit). Techno and organic are from the second
++// outside review; "organic east" has the patterns written for harmonic minor.
++const uint8_t START_PATTERNS[FACTORY_MODE][INITIAL_PATTERN_COUNT][8] = {
++  { { 51,51,51,58,51,51,54,49 },   // low pulse
++    { 51,58,58,54,51,58,56,54 },   // two notes and an answer
++    { 51,54,58,61,63,61,58,54 },   // rise
++    { 63,61,59,58,56,54,53,51 } }, // descending turn
++  { { 51,51,58,56,51,54,51,51 },   // answer to the bongos
++    { 51,54,56,58,61,58,56,54 },   // walk up
++    { 51,51,63,58,51,56,54,51 },   // low and octave
++    { 58,61,63,66,63,61,58,56 } }, // high answer
++  { { 51,51,58,59,58,58,62,63 },   // rising
++    { 39,39,39,39,42,42,38,39 },   // bass
++    { 58,59,62,59,58,58,54,54 },   // hijaz
++    { 51,54,54,58,58,59,58,58 } }  // answer
++};
++const uint8_t START_PATTERN_STEPS[FACTORY_MODE][INITIAL_PATTERN_COUNT] = {
++  { 0b10011011, 0b10100101, 0b11101101, 0b10110101 },
++  { 0b10010100, 0b10101011, 0b10011010, 0b11001011 },
++  { 0b10110111, 0b10011011, 0b11111010, 0b11010110 }
++};
++
+ void sequencer_init();
+ void sequencer_restart();
+ void sequencer_start();
+@@ -40,11 +64,55 @@ uint32_t previous_note_on_time;
+ uint32_t note_off_time;
+ 
+ bool double_speed = false;
++// Only the in-between steps add displacement against an external master.
++static uint8_t double_speed_extra_steps = 0;
++static void sequencer_restore_normal_step() {
++  if(double_speed_extra_steps) {
++    current_step = (current_step + SEQUENCER_NUM_STEPS - double_speed_extra_steps) % SEQUENCER_NUM_STEPS;
++    double_speed_extra_steps = 0;
++  }
++}
++
++
++// True once a MIDI Start has told us where the master's bar begins
++bool master_bar_known = false;
++static uint8_t sequencer_base_divider(bool following_master = false);
++
++// A MIDI Start or Continue has come and its first clock has not yet: our own
++// clock must not play the step in the meantime
++bool await_master_clock = false;
++uint32_t await_master_since = 0;
++static void sequencer_join_master();
++
++// A Song Position Pointer waits here for the Continue that follows it
++uint16_t song_position = 0;
++bool song_position_pending = false;
++void sequencer_continue();
++
++// Where the master's clock stood when it sent Stop
++#define MASTER_BAR_PULSES 96 // the Dato DRUM's bar: 8 steps of an 8th note
++uint32_t master_stop_clock = 0;
++bool master_stop_clock_valid = false;
++void sequencer_master_stop();
+ 
+ void sequencer_init() {
+   note_stack.Init();
++  // Start with one of four D# minor patterns instead of random scale notes.
++  // Knob noise and the power-up time pick the pattern
++  uint32_t seed = micros();
++  for(int i = 0; i < 16; i++) {
++    seed = seed * 33 + potRead(i & 7);
++  }
++  randomSeed(seed);
++  uint8_t pattern = random(INITIAL_PATTERN_COUNT);
+   for(int i = 0; i < SEQUENCER_NUM_STEPS; i++) {
+-    step_note[i] = SCALE[random(9)];
++    if(synth_mode == FACTORY_MODE) {
++      step_note[i] = SCALE[random(9)];
++      step_enable[i] = (0b10111101 >> (7 - i)) & 1;
++      continue;
++    }
++    step_note[i] = START_PATTERNS[synth_mode][pattern][i];
++    step_enable[i] = (START_PATTERN_STEPS[synth_mode][pattern] >> (7 - i)) & 1;
+   }
+   tempo_handler.setHandleTempoEvent(sequencer_tick_clock);
+   tempo_handler.setHandleAlignEvent(sequencer_align_clock);
+@@ -54,12 +122,76 @@ void sequencer_init() {
+ }
+ 
+ void sequencer_restart() {
++  double_speed_extra_steps = 0;
+   MIDI.sendRealTime(midi::Start);
+   delay(1);
+   current_step = SEQUENCER_NUM_STEPS - 1;
+   tempo_handler.midi_clock_reset();
+   sequencer_is_running = true;
+   sequencer_clock = 0;
++  master_bar_known = true;
++  song_position_pending = false;
++  await_master_clock = true;
++  await_master_since = millis();
++}
++
++/*
++ * MIDI Continue. After a Song Position Pointer, pick up at that place in the
++ * bar: the Dato DRUM (duo-team build) resumes mid-pattern and says where.
++ * A position is counted in 16th notes, six clock pulses each.
++ * Without a position it carries on from where the sequencer stopped, on the
++ * master's next clock.
++ * Stock firmware restarted from the first step on a Continue from the MIDI socket.
++ */
++void sequencer_continue() {
++  MIDI.sendRealTime(midi::Continue);
++  usbMIDI.sendRealTime(midi::Continue);
++  tempo_handler.midi_clock_reset();
++  await_master_clock = true;
++  await_master_since = millis();
++  if(!song_position_pending) {
++    sequencer_is_running = true;
++    return;
++  }
++  song_position_pending = false;
++  double_speed_extra_steps = 0;
++  sequencer_clock = (uint32_t)song_position * 6;
++  // The command comes from a master, so the tempo knob is a multiplier here
++  // even if its clock has paused and we have fallen back on our own
++  uint8_t divider = sequencer_base_divider(true);
++  // At half speed our eight steps span two of the DRUM's bars, and the DRUM
++  // only says where it is inside its own bar. Stay in the bar we stopped in,
++  // or move to the next one if the DRUM wrapped around to its first step
++  uint32_t cycle = (uint32_t)SEQUENCER_NUM_STEPS * divider;
++  if(cycle > MASTER_BAR_PULSES && sequencer_clock < MASTER_BAR_PULSES && master_stop_clock_valid) {
++    uint32_t bars = cycle / MASTER_BAR_PULSES;
++    uint32_t bar_index = (master_stop_clock / MASTER_BAR_PULSES) % bars;
++    if(sequencer_clock < master_stop_clock % MASTER_BAR_PULSES) {
++      bar_index = (bar_index + 1) % bars;
++    }
++    sequencer_clock += bar_index * MASTER_BAR_PULSES;
++  }
++  // The next pulse that falls on a step boundary plays the step at that boundary.
++  // sequencer_advance() steps forward before it plays
++  current_step = ((sequencer_clock + divider - 1) / divider + SEQUENCER_NUM_STEPS - 1) % SEQUENCER_NUM_STEPS;
++  master_bar_known = true;
++  sequencer_is_running = true;
++}
++
++// MIDI Stop from the master: remember its place before stopping
++void sequencer_master_stop() {
++  master_stop_clock = sequencer_clock;
++  master_stop_clock_valid = master_bar_known;
++  sequencer_stop();
++}
++
++void midi_handle_song_position(unsigned beats) {
++  song_position = beats;
++  song_position_pending = true;
++}
++
++void midi_handle_song_position_usb(uint16_t beats) {
++  midi_handle_song_position(beats);
+ }
+ 
+ void sequencer_align_clock() {
+@@ -79,10 +211,57 @@ void sequencer_start() {
+   MIDI.sendRealTime(midi::Continue);
+   usbMIDI.sendRealTime(midi::Continue);
+   tempo_handler.midi_clock_reset();
++  await_master_clock = false; // our own Play never waits for a master
++  if(tempo_handler.is_clock_source_internal()) {
++    master_bar_known = false;
++  } else if(!sequencer_is_running) {
++    sequencer_join_master();
++  }
+   sequencer_is_running = true;
+ }
+ 
++// Clock pulses per step, without the momentary double speed button
++static uint8_t sequencer_base_divider(bool following_master) {
++  uint8_t divider = PULSES_PER_EIGHT_NOTE;
++  if(following_master || !tempo_handler.is_clock_source_internal()) {
++    int potvalue = potRead(TEMPO_POT);
++    if(potvalue > 900) {
++      divider /= 2;
++    } else if(potvalue < 127) {
++      divider *= 2;
++    }
++  }
++  return divider;
++}
++
++/*
++ * Play was pressed while following an external clock.
++ * - If the master has sent a Start, come back in on the step the bar is at,
++ *   so the pattern stays lined up with the master however long we sat out.
++ * - If the press came just after a step boundary, play that step right away
++ *   instead of waiting for the next one: pressing on the beat lands on the beat.
++ */
++static void sequencer_join_master() {
++  if(sequencer_clock == 0) {
++    return;
++  }
++  uint8_t divider = sequencer_base_divider();
++  uint32_t last_boundary = (sequencer_clock - 1) / divider;
++  uint8_t ticks_since = (sequencer_clock - 1) % divider;
++  bool play_now = ticks_since <= divider / 3;
++
++  if(master_bar_known) {
++    // sequencer_advance() steps forward before it plays
++    current_step = (last_boundary + (play_now ? SEQUENCER_NUM_STEPS - 1 : 0)) % SEQUENCER_NUM_STEPS;
++  }
++  if(play_now) {
++    sequencer_is_running = true;
++    sequencer_advance();
++  }
++}
++
+ void sequencer_stop() {
++  sequencer_restore_normal_step();
+   if(sequencer_is_running) {
+ 
+     usbMIDI.sendControlChange(123,0,MIDI_CHANNEL);
+@@ -93,7 +272,12 @@ void sequencer_stop() {
+     sequencer_is_running = false;
+     sequencer_untrigger_note();
+   }
+-  midi_clock = 0;
++  song_position_pending = false;
++  await_master_clock = false;
++  // Stock firmware only zeroed midi_clock here. The tempo handler then saw a
++  // change and fired one extra pulse, so after every stop a MIDI follower ran
++  // one pulse (20 ms at 120 bpm) further ahead of its master
++  tempo_handler.midi_clock_reset();
+ }
+ 
+ void sequencer_toggle_start() {
+@@ -105,23 +289,23 @@ void sequencer_toggle_start() {
+ }
+ 
+ void sequencer_tick_clock() {
+-  uint8_t sequencer_divider = PULSES_PER_EIGHT_NOTE;
+-  if(double_speed) {
+-    sequencer_divider = PULSES_PER_EIGHT_NOTE / 2;
+-  }
+-
+-  if(!tempo_handler.is_clock_source_internal()) {
+-    int potvalue = potRead(TEMPO_POT);
+-    if(potvalue > 900) {
+-      sequencer_divider /= 2;
+-    } else if(potvalue < 127) {
+-      sequencer_divider *= 2;
++  if(await_master_clock) {
++    if(!tempo_handler.is_clock_source_internal()) {
++      await_master_clock = false;
++    } else if(millis() - await_master_since > TEMPO_MIDI_TIMEOUT_MS) {
++      await_master_clock = false; // no clock followed the command: run on our own
++    } else {
++      return;
+     }
+   }
+-
+-  if(sequencer_is_running && (sequencer_clock % sequencer_divider)==0) {
++  const uint8_t base_divider = sequencer_base_divider();
++  const uint8_t divider = double_speed ? base_divider / 2 : base_divider;
++  if(sequencer_is_running && sequencer_clock % divider == 0) {
++    if(double_speed && sequencer_clock % base_divider != 0 && !tempo_handler.is_clock_source_internal()) {
++      double_speed_extra_steps = (double_speed_extra_steps + 1) % SEQUENCER_NUM_STEPS;
++    }
+     sequencer_advance();
+-  } 
++  }
+   sequencer_clock++;
+ }
+ 
+@@ -167,6 +351,7 @@ void sequencer_advance() {
+ }
+ 
+ void sequencer_reset() {
++  double_speed_extra_steps = 0;
+   current_step = SEQUENCER_NUM_STEPS;
+ }
+ 
+@@ -184,9 +369,13 @@ static void sequencer_trigger_note() {
+   previous_note_on_time = millis();
+   note_off_time = previous_note_on_time + gate_length_msec;
+ 
+-  step_velocity[current_step] = INITIAL_VELOCITY;
++  // Velocity only sets how far the filter envelope opens. Stock played every
++  // step at 100; here an accented step opens further, by an amount set per mode
++  const uint8_t playing = (current_step+random_offset)%SEQUENCER_NUM_STEPS;
++  const SynthModeVoice &voice = SYNTH_MODE_VOICE[synth_mode];
++  step_velocity[playing] = step_accent[playing] ? voice.velocity_accent : voice.velocity_normal;
+ 
+-  note_on(step_note[((current_step+random_offset)%SEQUENCER_NUM_STEPS)]+transpose, step_velocity[((current_step+random_offset)%SEQUENCER_NUM_STEPS)], step_enable[((current_step+random_offset)%SEQUENCER_NUM_STEPS)]);
++  note_on(step_note[playing]+transpose, step_velocity[playing], step_enable[playing]);
+ }
+ 
+ static void sequencer_untrigger_note() {
+@@ -216,7 +405,7 @@ void keyboard_to_note() {
+         uint8_t k = note_stack.most_recent_note().note;
+         if(k != n) {
+           sequencer_advance_without_play();
+-          note_on(k+transpose, INITIAL_VELOCITY, true);
++          note_on(k+transpose, SYNTH_MODE_VOICE[synth_mode].velocity_normal, true);
+           n = k;
+         }
+       } else {
+diff --git a/src/Synth.h b/src/Synth.h
+index 183b74a..03bbaa2 100644
+--- a/src/Synth.h
++++ b/src/Synth.h
+@@ -40,9 +40,11 @@
+ //
+ #include <analyze_peak.h>
+ #include <effect_bitcrusher.h>
+-#include <effect_delay.h>
+ #include <effect_fade.h>
+ #include "effect_custom_envelope.h"
++#include "effect_space.h"
++#include "effect_gain_ramp.h"
++#include "synth_blep.h"
+ #include <effect_multiply.h>
+ #include <filter_variable.h>
+ #include <input_adc.h>
+@@ -55,16 +57,18 @@
+ #include <synth_simple_drum.h>
+ 
+ // GUItool: begin automatically generated code
+-AudioSynthWaveform       osc_pulse;      //xy=78.10000610351562,97
+-AudioSynthWaveform       osc_saw;        //xy=79.10000610351562,44
++// Band-limited replacements for AudioSynthWaveform, same pitch and width behaviour
++AudioSynthBlep           osc_pulse;
++AudioSynthBlep           osc_saw;
+ AudioSynthWaveformDc     dc1;            //xy=88.10000610351562,149
+ AudioEffectCustomEnvelope envelope2;      //xy=227.10000610351562,149
+ AudioMixer4              mixer1;         //xy=255.10000610351562,83
+ AudioFilterStateVariable filter1;        //xy=403.1000061035156,91
+ AudioEffectCustomEnvelope envelope1;      //xy=560.1000061035156,81
+ AudioAnalyzePeak         peak1;          //xy=705.1000061035156,37
+-AudioEffectDelay         delay1;         //xy=712.0999755859375,174.10000610351562
++AudioEffectSpace         space1;         // tempo-synced delay + reverb, replaces delay1
+ AudioEffectBitcrusher    bitcrusher1;    //xy=718.1000061035156,81
++AudioEffectGainRamp      duck1;          // dry voice only: ducks under the DRUM's kick
+ AudioMixer4              mixer_delay;     //xy=728.0999755859375,279.1000061035156
+ AudioMixer4              mixer_output;         //xy=861.1000061035156,100
+ AudioEffectFade          pop_suppressor;          //xy=1062,292
+@@ -85,11 +89,11 @@ AudioConnection          patchCord5(mixer1, 0, filter1, 0);
+ AudioConnection          patchCord6(filter1, 0, envelope1, 0);
+ AudioConnection          patchCord7(envelope1, peak1);
+ AudioConnection          patchCord8(envelope1, bitcrusher1);
+-AudioConnection          patchCord9(delay1, 0, mixer_output, 1);
+-AudioConnection          patchCord10(delay1, 0, mixer_delay, 1);
+-AudioConnection          patchCord11(bitcrusher1, 0, mixer_output, 0);
++AudioConnection          patchCord9(space1, 0, mixer_output, 1);
++AudioConnection          patchCord11(bitcrusher1, 0, duck1, 0);
++AudioConnection          patchCord11b(duck1, 0, mixer_output, 0);
+ AudioConnection          patchCord12(bitcrusher1, 0, mixer_delay, 0);
+-AudioConnection          patchCord13(mixer_delay, delay1);
++AudioConnection          patchCord13(mixer_delay, space1);
+ AudioConnection          patchCord20(hat_noise1, hat_envelope1);
+ AudioConnection          patchCord21(hat_envelope1, 0, hat_filter_hp, 0);
+ AudioConnection          patchCord22(hat_filter_hp, 2, hat_filter_bp, 0);
+@@ -108,17 +112,54 @@ AudioConnection          patchCord16(pop_suppressor, dac1);
+ #define KICK_GAIN 0.8
+ #define HAT_GAIN 0.9
+ 
++// What differs between the two synth modes besides the keys
++struct SynthModeVoice {
++  uint16_t resonance_max;   // hundredths: the resonance knob goes from 0.70 to this
++  float filter_octaves;     // how far the filter envelope opens the cutoff
++  uint8_t amp_attack_ms;
++  uint16_t saw_gain;        // thousandths of the sawtooth's usual level
++  float echo_feedback;
++  float echo_level;
++  float reverb_level;
++  float reverb_time;
++  float reverb_damping;
++  // Filter envelope. Stock held the filter fully open for as long as the
++  // note was held (decay 0, sustain 1); a decay to a lower sustain gives each
++  // note a clear start and then makes room for the drums
++  uint8_t filter_attack_ms;
++  uint16_t filter_decay_ms;
++  float filter_sustain;
++  uint16_t filter_release_ms;
++  uint8_t velocity_normal;  // filter envelope depth of a plain step, of 127
++  uint8_t velocity_accent;  // and of an accented one
++  float duck_gain;          // dry voice level at the bottom of a kick duck
++  uint8_t duck_hold_ms;
++  uint8_t duck_return_ms;
++  float hat_send;           // built-in hat into the effect
++};
++// Values from the second outside review (19.11.2026); the organic voice is used
++// by both organic modes
++#define ORGANIC_VOICE { 260, 2.5f, 7, 700, 0.31f, 0.62f, 0.72f, 0.90f, 0.50f, 13, 150, 0.55f, 160, 94, 109, 0.841f, 8, 85, 0.15f }
++const SynthModeVoice SYNTH_MODE_VOICE[SYNTH_MODE_COUNT] = {
++  { 350, 3.5f, 5, 1000, 0.44f, 0.82f, 0.66f, 0.88f, 0.38f, 8, 120, 0.50f, 125, 100, 119, 0.708f, 12, 115, 0.20f },  // techno
++  ORGANIC_VOICE,
++  ORGANIC_VOICE,
++  { 320, 4.0f, 5, 1000, 0.4f, 1.0f, 0.0f, 0.89f, 0.35f, 15, 0, 1.0f, 300, 100, 127, 0.708f, 12, 115, 0.4f } // Factory with anti-click attack
++};
++
+ void audio_init();
+ void audio_volume(uint8_t volume);
+ void synth_update();
+ 
+ void audio_init() {
+-  AudioMemory(128); // 260 bytes per block, 2.9ms per block
++  // 260 bytes per block, 2.9ms per block. The stock firmware needed 128 blocks,
++  // nearly all of them for the delay line. The space effect has its own buffers
++  AudioMemory(32);
+ 
+   // Oscillators
+-  osc_saw.begin(0.4, 110, WAVEFORM_SAWTOOTH);
++  osc_saw.begin(0.4, 110, BLEP_SAWTOOTH);
+   osc_pulse.pulseWidth(0.5);
+-  osc_pulse.begin(0.4, 220, WAVEFORM_PULSE);
++  osc_pulse.begin(0.4, 220, BLEP_PULSE);
+   
+   // Mixer mixes the oscillators - don't add up to more than 0.8 or the output will clip
+   mixer1.gain(0, 0.4); // OSC1
+@@ -130,7 +171,7 @@ void audio_init() {
+   filter1.octaveControl(4);
+ 
+   // Amp envelope
+-  envelope1.attack(2);
++  envelope1.attack(5); // stock was 2 ms, which clicks when a note starts from silence
+   envelope1.decay(0);
+   envelope1.sustain(1.0);
+   envelope1.release(400);
+@@ -146,9 +187,14 @@ void audio_init() {
+   bitcrusher1.bits(16);
+   bitcrusher1.sampleRate(44100);
+ 
+-  delay1.delay(0, 440); // Delay time
+-  mixer_delay.gain(0, 0.0); // Delay input
+-  mixer_delay.gain(1, 0.4); // Delay feedback
++  // Delay time follows the tempo, see space_update()
++  space1.delayTime(369);
++  space1.feedback(0.5);
++  space1.delayLevel(1.0);
++  space1.reverbLevel(0.8);
++  space1.reverbTime(0.89);
++  space1.reverbDamping(0.35);
++  mixer_delay.gain(0, 0.0); // Effect send
+ 
+   mixer_output.gain(0, MAIN_GAIN);
+   mixer_output.gain(1, DELAY_GAIN); // Delay output
+@@ -173,7 +219,29 @@ void audio_init() {
+   #endif
+ }
+ 
++// How far the dry voice is pulled down right now by a kick on the DRUM:
++// straight to the floor, held, then back up in a straight line
++float duck_factor() {
++  if(!duck_active) {
++    return 1.0f;
++  }
++  const SynthModeVoice &voice = SYNTH_MODE_VOICE[synth_mode];
++  uint32_t t = millis() - duck_start_ms;
++  if(t <= voice.duck_hold_ms) {
++    return duck_floor;
++  }
++  t -= voice.duck_hold_ms;
++  if(t >= voice.duck_return_ms) {
++    duck_active = false;
++    return 1.0f;
++  }
++  return duck_floor + (1.0f - duck_floor) * t / voice.duck_return_ms;
++}
++
+ void audio_volume(int volume) {
++  // Only the dry voice ducks: echo and reverb carry on through the kick.
++  // The duck has its own gain stage, which glides instead of stepping
++  duck1.gain(duck_factor());
+   mixer_output.gain(0, (volume/1023.)*MAIN_GAIN);
+   mixer_output.gain(1, (volume/1023.)*DELAY_GAIN);
+ 
+@@ -181,24 +249,59 @@ void audio_volume(int volume) {
+   mixer_output.gain(3, (volume/2048.)*HAT_GAIN+0.5);
+ }
+ 
++void apply_synth_mode() {
++  const SynthModeVoice &voice = SYNTH_MODE_VOICE[synth_mode];
++  AudioNoInterrupts();
++  filter1.octaveControl(voice.filter_octaves);
++  envelope1.attack(voice.amp_attack_ms);
++  envelope2.attack(voice.filter_attack_ms);
++  envelope2.decay(voice.filter_decay_ms);
++  envelope2.sustain(voice.filter_sustain);
++  envelope2.release(voice.filter_release_ms);
++  space1.feedback(voice.echo_feedback);
++  space1.delayLevel(voice.echo_level);
++  space1.reverbLevel(voice.reverb_level);
++  space1.reverbTime(voice.reverb_time);
++  space1.reverbDamping(voice.reverb_damping);
++  AudioInterrupts();
++}
++
+ void synth_update() {
+-  // Audio interrupts have to be off to apply settings
++  const SynthModeVoice &voice = SYNTH_MODE_VOICE[synth_mode];
++
++  // The cutoff needs powf and sinf, slow without an FPU. Do it before the audio
++  // interrupt is held off; a block with a half-updated cutoff does no harm.
++  // Exponential cutoff, 40 to 780 Hz, so a slow sweep sounds even all the way.
++  // The filter envelope adds up to four octaves on top. Stock was linear 30-541 Hz.
++  // Do not raise the top: from about 950 Hz, with the envelope fully open and the
++  // resonance at its minimum, this state variable filter overflows inside and
++  // puts out pure noise (hosttest/filter_scan.py; an earlier build went to 1.8 kHz
++  // and did exactly that)
++  static int previous_filter = -1;
++  static int previous_mode = -1;
++  if(synth.filter != previous_filter || synth_mode != previous_mode) {
++    previous_filter = synth.filter;
++    previous_mode = synth_mode;
++    filter1.frequency(synth_mode == FACTORY_MODE ? synth.filter / 2 + 30 :
++                      40.0f * powf(2.0f, synth.filter * (4.285f / 1023.0f)));
++  }
++
++  // Audio interrupts have to be off to apply the rest of the settings
+   AudioNoInterrupts();
+ 
+   osc_saw.frequency(osc_saw_frequency);
+ 
++  int saw_level = 400;
+   if(synth.detune > 850) {
+-    osc_saw.amplitude(map(synth.detune,850,1023,400,0)/1000.);
++    saw_level = map(synth.detune,850,1023,400,0);
+   } else if(synth.detune < 200) {
+-    osc_saw.amplitude(map(synth.detune,0,200,200,400)/1000.);
+-  } else {
+-    osc_saw.amplitude(0.4);
++    saw_level = map(synth.detune,0,200,200,400);
+   }
++  osc_saw.amplitude((saw_level * (int32_t)voice.saw_gain) / 1000000.);
+   osc_pulse.frequency(osc_pulse_frequency);
+   osc_pulse.pulseWidth(map(synth.pulseWidth,0,1023,1000,100)/1000.0);
+ 
+-  filter1.frequency((synth.filter/2)+30);
+-  filter1.resonance(map(synth.resonance,0,1023,70,320)/100.0); // 0.7-3.2 range
++  filter1.resonance(map(synth.resonance,0,1023,70,voice.resonance_max)/100.0); // stock 0.7-3.2
+ 
+   envelope1.release(((synth.release*synth.release) >> 11)+30);
+ 
+diff --git a/src/TempoHandler.h b/src/TempoHandler.h
+index 555e456..68f8fe5 100644
+--- a/src/TempoHandler.h
++++ b/src/TempoHandler.h
+@@ -25,6 +25,7 @@
+ #define TEMPO_SOURCE_SYNC     2
+ #define TEMPO_SYNC_DIVIDER   12
+ #define TEMPO_SYNC_PULSE_MS  12
++#define TEMPO_MIDI_TIMEOUT_MS 1000
+  
+ class TempoHandler 
+ {
+@@ -39,12 +40,19 @@ class TempoHandler
+       _ppqn = ppqn;
+     }
+     void update() {
++      // When the MIDI clock goes away, hand the tempo back to the knob.
++      // The stock firmware stayed a MIDI follower until it was switched off
++      if(_midi_clock_received_flag && (millis() - _last_midi_clock_ms) > TEMPO_MIDI_TIMEOUT_MS) {
++        _midi_clock_received_flag = 0;
++      }
++
+       // Determine which source is selected for tempo
+       if(digitalRead(SYNC_DETECT)) {
+         if(_source != TEMPO_SOURCE_SYNC) {
+           _source = TEMPO_SOURCE_SYNC;
+         }
+         _midi_clock_received_flag = 0;
++        _previous_midi_clock = midi_clock; // Ignore MIDI ticks while the sync jack owns the tempo.
+       } else if (_midi_clock_received_flag) { 
+         if(_source != TEMPO_SOURCE_MIDI) {
+           _source = TEMPO_SOURCE_MIDI;
+@@ -73,18 +81,26 @@ class TempoHandler
+     }
+     void midi_clock_received() {
+       _midi_clock_received_flag = 1;
++      _last_midi_clock_ms = millis();
+     }
+     void midi_clock_reset() {
+       midi_clock = 0;
+       _previous_midi_clock = 0;
++      _midi_measure_clock = 0;
++      _midi_measure_time = micros();
+     }
+     void reset_clock_source() {
+       _midi_clock_received_flag = 0;
+       _source = TEMPO_SOURCE_INTERNAL;
+     }
++    uint8_t clock_source() const { return _source; }
+     bool is_clock_source_internal() {
+       return _source == TEMPO_SOURCE_INTERNAL;
+     }
++    // Time between two of the 24 ppqn pulses, whatever the clock source
++    uint32_t pulse_interval_us() {
++      return _pulse_interval;
++    }
+   private:
+     elapsedMillis syncStart;
+     void (*tTempoCallback)();
+@@ -99,12 +115,45 @@ class TempoHandler
+     bool _midi_clock_received_flag = 0;
+     uint16_t _clock = 0;
+     uint16_t _ppqn = 24;
++    uint32_t _pulse_interval = 0;
++    uint32_t _midi_measure_clock = 0;
++    uint32_t _midi_measure_time = 0;
++    uint32_t _internal_measure_time = 0;
++    uint32_t _last_midi_clock_ms = 0;
++    uint8_t _internal_pulse_count = 0;
++
++    // Sync and MIDI clock intervals are measured from the main loop and jitter
++    // by a millisecond or two, so smooth them. A real tempo change passes at once
++    void measured_pulse_interval(uint32_t interval) {
++      uint32_t diff = interval > _pulse_interval ? interval - _pulse_interval : _pulse_interval - interval;
++      if(diff > _pulse_interval / 10) {
++        _pulse_interval = interval;
++      } else {
++        _pulse_interval = (_pulse_interval * 3 + interval) / 4;
++      }
++    }
+ 
+     void update_midi() { 
+       if(midi_clock != _previous_midi_clock) {
+-        _previous_midi_clock = midi_clock;
++        // More than one clock can arrive between two passes of the main loop.
++        // Stock firmware then fired a single pulse and fell a pulse behind
++        uint32_t pulses = midi_clock - _previous_midi_clock;
++        if(pulses > 4) {
++          pulses = 4;
++        }
++        _previous_midi_clock += pulses; // Service any remainder on the next pass.
+         _previous_clock_time = micros();
+-        trigger();
++        if(midi_clock < _midi_measure_clock) {
++          _midi_measure_clock = midi_clock;
++          _midi_measure_time = _previous_clock_time;
++        } else if(midi_clock - _midi_measure_clock >= 12) {
++          measured_pulse_interval((_previous_clock_time - _midi_measure_time) / (midi_clock - _midi_measure_clock));
++          _midi_measure_clock = midi_clock;
++          _midi_measure_time = _previous_clock_time;
++        }
++        while(pulses--) {
++          trigger();
++        }
+       }
+     }
+     void update_sync() {
+@@ -113,6 +162,7 @@ class TempoHandler
+ 
+       if(_sync_pin_previous_value && !_sync_pin_value) {
+         _tempo_interval = (micros() - _previous_sync_time) / TEMPO_SYNC_DIVIDER;
++        measured_pulse_interval(_tempo_interval);
+         _clock = 0;
+         _previous_sync_time = micros();
+         _previous_clock_time = micros();
+@@ -148,8 +198,21 @@ class TempoHandler
+       }
+       _tempo_interval = 5000000/tbpm;
+       
+-      if((micros() - _previous_clock_time) > _tempo_interval)  {
+-        _previous_clock_time = micros();
++      uint32_t now = micros();
++      if((now - _previous_clock_time) > _tempo_interval)  {
++        // Count from the moment the pulse was due, not from the moment the main
++        // loop noticed it. The stock firmware did the latter and ran about 3 %
++        // slow. After a long stall, start over instead of catching up
++        if((now - _previous_clock_time) > _tempo_interval * 3) {
++          _previous_clock_time = now;
++        } else {
++          _previous_clock_time += _tempo_interval;
++        }
++        if(++_internal_pulse_count >= 12) {
++          measured_pulse_interval((now - _internal_measure_time) / _internal_pulse_count);
++          _internal_pulse_count = 0;
++          _internal_measure_time = now;
++        }
+         trigger();
+       }
+     }
+diff --git a/src/TouchSlider.h b/src/TouchSlider.h
+index 7d037c9..2cfbc71 100644
+--- a/src/TouchSlider.h
++++ b/src/TouchSlider.h
+@@ -75,7 +75,7 @@ class TouchSensor {
+     int _cnt;
+     int _baseline;
+     int _baselineValues[NUM_SAMPLES];
+-    int _baselineIndex;
++    int _baselineIndex = 0;
+     int32_t _threshold;
+     int16_t _signal;
+ };
+diff --git a/src/effect_space.cpp b/src/effect_space.cpp
+new file mode 100644
+index 0000000..b26183b
+--- /dev/null
++++ b/src/effect_space.cpp
+@@ -0,0 +1,197 @@
++#include "effect_space.h"
++#include <string.h>
++
++static const uint16_t COMB_LEN[SPACE_NUM_COMBS] = { 557, 593, 641, 677, 709, 743, 773, 809 };
++static const uint16_t ALLPASS_LEN[SPACE_NUM_ALLPASS] = { 277, 223, 173, 113 };
++
++static inline int32_t saturate16(int32_t x) {
++  if (x > 32767) return 32767;
++  if (x < -32768) return -32768;
++  return x;
++}
++
++// Q15 multiply that rounds toward zero, so feedback loops decay to exact silence
++static inline int32_t mul_q15(int32_t a, int32_t b) {
++  int32_t p = a * b;
++  return (p + ((p >> 31) & 32767)) >> 15;
++}
++
++static int32_t to_fixed(float value, float max, float scale) {
++  if (value < 0.0f) value = 0.0f;
++  if (value > max) value = max;
++  return (int32_t)(value * scale);
++}
++
++AudioEffectSpace::AudioEffectSpace(void) : AudioStream(1, inputQueueArray) {
++  memset(delay_buf, 0, sizeof(delay_buf));
++  memset(comb_buf_0, 0, sizeof(comb_buf_0));
++  memset(comb_buf_1, 0, sizeof(comb_buf_1));
++  memset(comb_buf_2, 0, sizeof(comb_buf_2));
++  memset(comb_buf_3, 0, sizeof(comb_buf_3));
++  memset(comb_buf_4, 0, sizeof(comb_buf_4));
++  memset(comb_buf_5, 0, sizeof(comb_buf_5));
++  memset(comb_buf_6, 0, sizeof(comb_buf_6));
++  memset(comb_buf_7, 0, sizeof(comb_buf_7));
++  memset(allpass_buf_0, 0, sizeof(allpass_buf_0));
++  memset(allpass_buf_1, 0, sizeof(allpass_buf_1));
++  memset(allpass_buf_2, 0, sizeof(allpass_buf_2));
++  memset(allpass_buf_3, 0, sizeof(allpass_buf_3));
++  comb_buf[0] = comb_buf_0;
++  comb_buf[1] = comb_buf_1;
++  comb_buf[2] = comb_buf_2;
++  comb_buf[3] = comb_buf_3;
++  comb_buf[4] = comb_buf_4;
++  comb_buf[5] = comb_buf_5;
++  comb_buf[6] = comb_buf_6;
++  comb_buf[7] = comb_buf_7;
++  allpass_buf[0] = allpass_buf_0;
++  allpass_buf[1] = allpass_buf_1;
++  allpass_buf[2] = allpass_buf_2;
++  allpass_buf[3] = allpass_buf_3;
++  for (int i = 0; i < SPACE_NUM_COMBS; i++) {
++    comb_pos[i] = 0;
++    comb_filter[i] = 0;
++  }
++  for (int i = 0; i < SPACE_NUM_ALLPASS; i++) {
++    allpass_pos[i] = 0;
++  }
++  delay_write = 0;
++  delay_target = delay_current = delay_next = SPACE_DELAY_SAMPLES / 2;
++  xfade = 0;
++  fb_lowpass = fb_highpass = 0;
++  rev_highpass = 0;
++  antialias = 0;
++  last_wet = 0;
++  feedback(0.5);
++  delayLevel(1.0);
++  reverbLevel(1.0);
++  delay_gain = delay_gain_target;
++  reverb_gain = reverb_gain_target;
++  reverbTime(0.89);
++  reverbDamping(0.35);
++}
++
++void AudioEffectSpace::delayTime(float milliseconds) {
++  float n = milliseconds * (SPACE_RATE / 1000.0) + 0.5;
++  if (n < 16.0f) n = 16.0f;
++  if (n > SPACE_DELAY_SAMPLES - 1) n = SPACE_DELAY_SAMPLES - 1;
++  delay_target = (uint16_t)n;
++}
++
++void AudioEffectSpace::feedback(float amount) {
++  fb_gain = to_fixed(amount, 0.9f, 32768.0f);
++}
++
++void AudioEffectSpace::delayLevel(float level) {
++  delay_gain_target = to_fixed(level, 1.99f, 16384.0f);
++}
++
++void AudioEffectSpace::reverbLevel(float level) {
++  reverb_gain_target = to_fixed(level, 1.99f, 16384.0f);
++}
++
++void AudioEffectSpace::reverbTime(float amount) {
++  rev_feedback = to_fixed(amount, 0.97f, 32768.0f);
++}
++
++void AudioEffectSpace::reverbDamping(float amount) {
++  rev_damp = to_fixed(amount, 0.9f, 32768.0f);
++}
++
++void AudioEffectSpace::update(void) {
++  audio_block_t *in = receiveReadOnly(0);
++  audio_block_t *out = allocate();
++  if (!out) {
++    if (in) release(in);
++    return;
++  }
++
++  // A quarter of the way to the target every block: about 12 ms to settle
++  delay_gain += (delay_gain_target - delay_gain + ((delay_gain_target > delay_gain) ? 3 : 0)) / 4;
++  reverb_gain += (reverb_gain_target - reverb_gain + ((reverb_gain_target > reverb_gain) ? 3 : 0)) / 4;
++
++  const int16_t *src = in ? in->data : 0;
++  int16_t *dst = out->data;
++  int32_t prev = last_wet;
++  int32_t aa = antialias;
++  uint16_t w = delay_write;
++
++  for (int i = 0; i < AUDIO_BLOCK_SAMPLES / 2; i++) {
++    // Halve the sample rate: one-pole lowpass (~5 kHz), then average pairs
++    int32_t s0 = 0, s1 = 0;
++    if (src) {
++      s0 = *src++;
++      s1 = *src++;
++    }
++    aa += (s0 - aa) >> 1;
++    int32_t x = aa;
++    aa += (s1 - aa) >> 1;
++    x = (x + aa) >> 1;
++
++    // Delay tap, crossfading to a new tap when the delay time changes
++    int32_t idx = (int32_t)w - delay_current;
++    if (idx < 0) idx += SPACE_DELAY_SAMPLES;
++    int32_t d = delay_buf[idx];
++    if (xfade) {
++      idx = (int32_t)w - delay_next;
++      if (idx < 0) idx += SPACE_DELAY_SAMPLES;
++      int32_t d2 = delay_buf[idx];
++      d = (d * xfade + d2 * ((1 << SPACE_XFADE_BITS) - xfade)) >> SPACE_XFADE_BITS;
++      if (--xfade == 0) delay_current = delay_next;
++    } else if (delay_current != delay_target) {
++      delay_next = delay_target;
++      xfade = (1 << SPACE_XFADE_BITS);
++    }
++
++    // Feedback path: lowpass ~2.4 kHz and highpass ~230 Hz,
++    // so every repeat gets darker and thinner
++    fb_lowpass += (d - fb_lowpass) >> 1;
++    fb_highpass += (fb_lowpass - fb_highpass) >> 4;
++    int32_t fb = fb_lowpass - fb_highpass;
++    delay_buf[w] = saturate16(x + mul_q15(fb, fb_gain));
++    if (++w >= SPACE_DELAY_SAMPLES) w = 0;
++
++    // Reverb input: the dry send plus the echoes, lows removed
++    int32_t r = x + (d >> 1);
++    rev_highpass += (r - rev_highpass) >> 4;
++    r = (r - rev_highpass) >> 4;
++
++    int32_t sum = 0;
++    for (int c = 0; c < SPACE_NUM_COMBS; c++) {
++      int16_t *buf = comb_buf[c];
++      uint16_t p = comb_pos[c];
++      int32_t y = buf[p];
++      int32_t f = y + mul_q15(comb_filter[c] - y, rev_damp);
++      comb_filter[c] = f;
++      buf[p] = saturate16(r + mul_q15(f, rev_feedback));
++      if (++p >= COMB_LEN[c]) p = 0;
++      comb_pos[c] = p;
++      sum += y;
++    }
++    int32_t v = saturate16(sum >> 1);
++    for (int a = 0; a < SPACE_NUM_ALLPASS; a++) {
++      int16_t *buf = allpass_buf[a];
++      uint16_t p = allpass_pos[a];
++      int32_t y = buf[p];
++      buf[p] = saturate16(v + (y >> 1));
++      if (++p >= ALLPASS_LEN[a]) p = 0;
++      allpass_pos[a] = p;
++      v = saturate16(y - v);
++    }
++
++    int32_t wet = saturate16((d * delay_gain + v * reverb_gain) >> 14);
++
++    // Back to the full sample rate with linear interpolation
++    *dst++ = (int16_t)((prev + wet) >> 1);
++    *dst++ = (int16_t)wet;
++    prev = wet;
++  }
++
++  delay_write = w;
++  antialias = aa;
++  last_wet = prev;
++
++  transmit(out);
++  release(out);
++  if (in) release(in);
++}
+diff --git a/src/effect_space.h b/src/effect_space.h
+new file mode 100644
+index 0000000..6c26ca7
+--- /dev/null
++++ b/src/effect_space.h
+@@ -0,0 +1,80 @@
++#ifndef effect_space_h_
++#define effect_space_h_
++/*
++  "Space" send effect for the Dato DUO (melodic techno build):
++  a tempo-syncable delay with dark, thinned-out repeats, followed by a
++  Freeverb-style reverb. Runs at half the audio sample rate to fit the
++  K20's 64 KB of RAM and its CPU budget. Output is wet only.
++
++  Replaces the fixed 337 ms AudioEffectDelay of the stock firmware.
++*/
++#include "AudioStream.h"
++
++#define SPACE_RATE          (AUDIO_SAMPLE_RATE_EXACT / 2.0)
++#define SPACE_DELAY_SAMPLES 11700 // 530 ms at half rate
++#define SPACE_XFADE_BITS    9     // 512 half-rate samples = 23 ms tap crossfade
++#define SPACE_NUM_COMBS     8
++#define SPACE_NUM_ALLPASS   4
++
++class AudioEffectSpace : public AudioStream
++{
++public:
++  AudioEffectSpace(void);
++  // Delay time. A change is crossfaded, so it does not click or pitch-bend
++  void delayTime(float milliseconds);
++  // Delay feedback 0.0 - 0.9
++  void feedback(float amount);
++  // Wet levels 0.0 - 1.99
++  void delayLevel(float level);
++  void reverbLevel(float level);
++  // Reverb comb feedback 0.0 - 0.97 (tail length) and damping 0.0 - 0.9
++  void reverbTime(float amount);
++  void reverbDamping(float amount);
++  float delayTimeMs(void) { return delay_target * (1000.0 / SPACE_RATE); }
++  virtual void update(void);
++private:
++  audio_block_t *inputQueueArray[1];
++
++  // Delay
++  int16_t delay_buf[SPACE_DELAY_SAMPLES];
++  uint16_t delay_write;
++  volatile uint16_t delay_target; // in half-rate samples
++  uint16_t delay_current;
++  uint16_t delay_next;
++  uint16_t xfade;
++  int32_t fb_gain;      // Q15
++  int32_t fb_lowpass;
++  int32_t fb_highpass;
++
++  // Reverb
++  int16_t comb_buf_0[557];
++  int16_t comb_buf_1[593];
++  int16_t comb_buf_2[641];
++  int16_t comb_buf_3[677];
++  int16_t comb_buf_4[709];
++  int16_t comb_buf_5[743];
++  int16_t comb_buf_6[773];
++  int16_t comb_buf_7[809];
++  int16_t allpass_buf_0[277];
++  int16_t allpass_buf_1[223];
++  int16_t allpass_buf_2[173];
++  int16_t allpass_buf_3[113];
++  int16_t *comb_buf[SPACE_NUM_COMBS];
++  int16_t *allpass_buf[SPACE_NUM_ALLPASS];
++  uint16_t comb_pos[SPACE_NUM_COMBS];
++  int32_t comb_filter[SPACE_NUM_COMBS];
++  uint16_t allpass_pos[SPACE_NUM_ALLPASS];
++  int32_t rev_feedback; // Q15
++  int32_t rev_damp;     // Q15
++  int32_t rev_highpass;
++
++  int32_t delay_gain;   // Q14, glides to its target so a mode switch does not step
++  int32_t reverb_gain;  // Q14
++  volatile int32_t delay_gain_target;
++  volatile int32_t reverb_gain_target;
++
++  int32_t antialias;
++  int32_t last_wet;
++};
++
++#endif
+diff --git a/src/envelope.h b/src/envelope.h
+index 1f42ca1..22cac59 100644
+--- a/src/envelope.h
++++ b/src/envelope.h
+@@ -38,7 +38,7 @@ struct LinearEnvelope{
+   // Returns an incremenet value that should be applied to curVal
+   // 'subdivisionCount' times to reach next value.
+   inline int step(){
+-      int curInc;
++      int curInc = 0;
+       int oldVal = curVal;
+       switch(state){
+         case Idle:
+@@ -64,11 +64,12 @@ struct LinearEnvelope{
+           }
+           break;
+         case Release:
+-          curInc = conf.releaseRate;
++          // A zero-time release (e.g. the hat) must finish even if sustain is zero.
++          curInc = conf.releaseRate ? conf.releaseRate : -oldVal;
+           curVal += curInc*subdivisionCount;
+           if(curVal <= 0){
+             curVal = 0;
+-            curInc = Config::calcRate(oldVal, subdivisionCount);
++            curInc = Config::calcRate(-oldVal, subdivisionCount);
+             state = Idle;
+           }
+           break;
+diff --git a/src/src.ino b/src/src.ino
+index 4dbf619..0c7882f 100644
+--- a/src/src.ino
++++ b/src/src.ino
+@@ -27,16 +27,51 @@
+ #include "TouchSlider.h"
+ #include <eeprom.h>
+ 
+-#define VERSION "1.2.0-beta1"
+-const uint8_t FIRMWARE_VERSION[] = { 1, 2, 0 };
++// Melodic techno build of 1.2.0. The patch number 51 and up marks this build,
++// the stock firmware answers 1.2.0
++#define VERSION "1.2.0-mt16"
++const uint8_t FIRMWARE_VERSION[] = { 1, 2, 66 };
+ 
+ // #define DEV_MODE
+ 
+ int MIDI_CHANNEL = 1;
+ 
+ // Musical settings
+-const uint8_t SCALE[] = { 49,51,54,56,58,61,63,66,68,70 };
+-const uint8_t SCALE_OFFSET_FROM_C3[] { 1,3,6,8,10,13,15,18,20,22 };
++// D# natural minor: C#3 D#3 F3 F#3 G#3 A#3 B3 C#4 D#4 F#4. The root stays on the second key.
++// Stock was the pentatonic { 49,51,54,56,58,61,63,66,68,70 }
++// Three modes of the whole synth, switched by pressing both transpose buttons
++// together (or by sysex f0 7d 64 0d <mode> f7) and kept in EEPROM.
++//   0 "techno":       D# natural minor keys, the fuller filter and echo
++//   1 "organic":      D# minor pentatonic keys (the stock layout), a softer,
++//                     darker voice, shorter echo
++//   2 "organic east": the organic voice with D# harmonic minor keys
++//                     (played from A# it is the Hijaz scale)
++// The root is on the second key in all three.
++// Keep existing SysEx mode numbers. The panel starts at factory then wraps to techno.
++const uint8_t FACTORY_MODE = 3;
++uint8_t synth_mode = FACTORY_MODE;
++#define SYNTH_MODE_COUNT 4
++const uint8_t SCALES[SYNTH_MODE_COUNT][10] = {
++  { 49,51,53,54,56,58,59,61,63,66 },  // C#3 D#3 F3  F#3 G#3 A#3 B3  C#4 D#4 F#4
++  { 49,51,54,56,58,61,63,66,68,70 },  // C#3 D#3 F#3 G#3 A#3 C#4 D#4 F#4 G#4 A#4
++  { 50,51,53,54,56,58,59,62,63,66 },   // D3  D#3 F3  F#3 G#3 A#3 B3  D4  D#4 F#4
++  { 49,51,54,56,58,61,63,66,68,70 }   // Factory
++};
++#define SCALE SCALES[synth_mode]
++void set_synth_mode(uint8_t mode);
++void apply_synth_mode();
++bool duck_enabled = false;
++void set_duck_enabled(bool enabled);
++// The note each key started, so the same note is released after a mode switch
++uint8_t key_note[10] = { 0,0,0,0,0,0,0,0,0,0 };
++// One accent bit per step; set with the Accent button held while stopped
++uint8_t step_accent[8] = { 0,0,0,0,0,0,0,0 };
++// Ducking of the dry voice under the DRUM's kick (its notes 30-37 on channel 10)
++#define DRUM_MIDI_CHANNEL 10
++uint32_t duck_start_ms = 0;
++float duck_floor = 1.0f;
++bool duck_active = false;
++void duck_trigger(uint8_t velocity);
+ 
+ #define HIGH_SAMPLE_RATE 44100
+ #define LOW_SAMPLE_RATE 2489
+@@ -44,6 +79,10 @@ const uint8_t SCALE_OFFSET_FROM_C3[] { 1,3,6,8,10,13,15,18,20,22 };
+ #define INITIAL_VELOCITY 100
+ 
+ #define EEPROM_MIDI_CHANNEL 0
++#define EEPROM_SYNTH_MODE 3 // First boot of the four-mode firmware selects factory.
++#define EEPROM_DUCK_ENABLED 2
++// Only this marker opts in. An erased or unused byte defaults to off.
++const uint8_t DUCK_ENABLED_MARKER = 0x53;
+ 
+ // Globals that should not be globals
+ int gate_length_msec = 40;
+@@ -75,6 +114,7 @@ void keys_scan();
+ void pots_read();
+ void drum_init();
+ void drum_read();
++void space_update();
+ void print_log();
+ 
+ void note_on(uint8_t midi_note, uint8_t velocity, bool enabled);
+@@ -127,11 +167,18 @@ void setup() {
+   pins_init();
+   amp_disable();
+   headphone_disable();
++  // The mode decides the start pattern, so read it before the sequencer starts
++  synth_mode = eeprom_read_byte((const uint8_t*)EEPROM_SYNTH_MODE);
++  if(synth_mode >= SYNTH_MODE_COUNT) {
++    synth_mode = FACTORY_MODE;
++  }
++  duck_enabled = eeprom_read_byte((const uint8_t*)EEPROM_DUCK_ENABLED) == DUCK_ENABLED_MARKER;
+   sequencer_init();
+   audio_init();
++  apply_synth_mode();
+ 
+   // Read the MIDI channel from EEPROM. Lowest four bits
+-  uint8_t stored_midi_channel = eeprom_read_byte(EEPROM_MIDI_CHANNEL & 0xf00);
++  uint8_t stored_midi_channel = eeprom_read_byte((const uint8_t*)(EEPROM_MIDI_CHANNEL & 0xf00));
+   midi_set_channel(stored_midi_channel);
+ 
+   // The order sequencer_init, button_matrix_init, led_init and midi_init is important
+@@ -149,8 +196,10 @@ void setup() {
+   touch_init();
+ 
+   MIDI.setHandleStart(sequencer_restart);
+-  MIDI.setHandleContinue(sequencer_restart);
+-  MIDI.setHandleStop(sequencer_stop);
++  MIDI.setHandleContinue(sequencer_continue);
++  MIDI.setHandleSongPosition(midi_handle_song_position);
++  usb_midi_handleSongPosition = midi_handle_song_position_usb;
++  MIDI.setHandleStop(sequencer_master_stop);
+ 
+   previous_note_on_time = millis();
+ 
+@@ -191,6 +240,7 @@ void loop() {
+     pots_read(); // ~ 100us
+ 
+     synth_update(); // ~ 100us
++    space_update();
+     midi_send_cc();
+ 
+     drum_read(); // ~ 700us
+@@ -225,14 +275,15 @@ void midi_handle_realtime(uint8_t type) {
+         midi_handle_clock();
+         break;
+       case 0xFA: // Start
+-        sequencer_reset_clock();
+-        sequencer_start();
++        // From the first step, the same as a Start on the MIDI socket.
++        // Stock firmware carried on from wherever the sequencer had stopped
++        sequencer_restart();
+         break;
+       case 0xFC: // Stop
+-        sequencer_stop();
++        sequencer_master_stop();
+         break;
+       case 0xFB: // Continue
+-        sequencer_start();
++        sequencer_continue();
+         break;
+       case 0xFE: // ActiveSensing
+       case 0xFF: // SystemReset
+@@ -241,7 +292,32 @@ void midi_handle_realtime(uint8_t type) {
+ }
+ 
+ // Scans the button_matrix and handles step enable and keys
++bool transpose_down_held = false;
++bool transpose_up_held = false;
++// A transpose button acts when it is let go. Both together switch the mode,
++// and pressing them one after the other, however slowly, must not transpose
++// on the way. Stock transposed on the press; at either end of the range a
++// held button gave a further octave until it was let go, which is kept as a
++// hold of TRANSPOSE_HOLD_MS
++#define TRANSPOSE_HOLD_MS 300
++int8_t transpose_pending = 0;
++uint32_t transpose_pending_at = 0;
++bool mode_chord_latched = false;
++bool duck_shortcut_pending = false;
++
++static void transpose_apply(int8_t direction) {
++  transpose += direction;
++  if(transpose < -12) { transpose = -24; }
++  if(transpose > 12) { transpose = 24; }
++}
++
+ void keys_scan() {
++  if(transpose_pending != 0 && transpose == 12 * transpose_pending
++     && (millis() - transpose_pending_at) >= TRANSPOSE_HOLD_MS) {
++    transpose = 24 * transpose_pending; // until the button is let go
++    transpose_pending = 0;
++  }
++
+   if(muxDigitalRead(DELAY_PIN)) {
+     synth.delay = false;
+     mixer_delay.gain(0, 0.0); // Delay input
+@@ -249,7 +325,7 @@ void keys_scan() {
+   } else {
+     synth.delay = true;
+     mixer_delay.gain(0, 0.5); // Delay input
+-    mixer_delay.gain(3, 0.4); // Hat delay input
++    mixer_delay.gain(3, SYNTH_MODE_VOICE[synth_mode].hat_send); // Hat delay input
+   }
+ 
+   synth.glide = !muxDigitalRead(SLIDE_PIN);
+@@ -265,23 +341,43 @@ void keys_scan() {
+                   if(in_setup) {
+                     midi_set_channel((k - KEYB_0) + 1);
+                   } else {
+-                    keyboard_set_note(SCALE[k - KEYB_0]);
++                    key_note[k - KEYB_0] = SCALE[k - KEYB_0];
++                    keyboard_set_note(key_note[k - KEYB_0]);
+                   }
+                 } else if (k <= STEP_8 && k >= STEP_1) {
+-                  step_enable[k-STEP_1] = 1-step_enable[k-STEP_1];
+-                  if(!step_enable[k-STEP_1]) { leds(k-STEP_1) = CRGB::Black; }
+-                  step_velocity[k-STEP_1] = INITIAL_VELOCITY;
++                  if(!sequencer_is_running && !digitalRead(ACCENT_PIN)) {
++                    // Accent held while stopped: the step button marks an accent
++                    step_accent[k-STEP_1] = 1-step_accent[k-STEP_1];
++                  } else {
++                    step_enable[k-STEP_1] = 1-step_enable[k-STEP_1];
++                    if(!step_enable[k-STEP_1]) { leds(k-STEP_1) = CRGB::Black; }
++                  }
+                 } else if (k == BTN_SEQ2) {
+                   if(!sequencer_is_running) {
+                     sequencer_advance();
+                   }
+                   double_speed = true;
+-                } else if (k == BTN_DOWN) {
+-                  transpose--;
+-                  if(transpose<-12){transpose = -24;}
+-                } else if (k == BTN_UP) {
+-                  transpose++;
+-                  if(transpose>12){transpose = 24;}
++                } else if (k == BTN_DOWN || k == BTN_UP) {
++                  // Both transpose buttons together switch the synth mode
++                  bool &this_held = (k == BTN_DOWN) ? transpose_down_held : transpose_up_held;
++                  bool other_held = (k == BTN_DOWN) ? transpose_up_held : transpose_down_held;
++                  this_held = true;
++                  if(mode_chord_latched) {
++                    // Still inside the same two-button press: nothing more happens
++                  } else if(other_held) {
++                    transpose_pending = 0;
++                    duck_shortcut_pending = false;
++                    // A long hold at either end may already be previewing the extra octave.
++                    transpose = constrain(transpose, -12, 12);
++                    mode_chord_latched = true;
++                    set_synth_mode((synth_mode + 1) % SYNTH_MODE_COUNT);
++                  } else if(k == BTN_UP && !in_setup && !digitalRead(ACCENT_PIN)) {
++                    // Commit on release so the two-arrow mode chord still wins.
++                    duck_shortcut_pending = true;
++                  } else {
++                    transpose_pending = (k == BTN_DOWN) ? -1 : 1;
++                    transpose_pending_at = millis();
++                  }
+                 } else if (k == BTN_SEQ1) {
+                   next_step_is_random = true;
+                   if(!sequencer_is_running) {
+@@ -316,13 +412,24 @@ void keys_scan() {
+                 break;
+             case RELEASED:
+                 if (k <= KEYB_9 && k >= KEYB_0) {
+-                  keyboard_unset_note(SCALE[k - KEYB_0]);
++                  keyboard_unset_note(key_note[k - KEYB_0]);
+                 } else if (k == BTN_SEQ2) {
+                   double_speed = false;
+-                } else if (k == BTN_DOWN) {
+-                  if(transpose<-12){transpose = -12;}
+-                  if(transpose>12){transpose = 12;}
+-                } else if (k == BTN_UP) {
++                  sequencer_restore_normal_step();
++                } else if (k == BTN_DOWN || k == BTN_UP) {
++                  if(k == BTN_DOWN) { transpose_down_held = false; } else { transpose_up_held = false; }
++                  if(k == BTN_UP && duck_shortcut_pending) {
++                    duck_shortcut_pending = false;
++                    set_duck_enabled(!duck_enabled);
++                  }
++                  // This is where a single button transposes
++                  if(transpose_pending == ((k == BTN_DOWN) ? -1 : 1)) {
++                    transpose_apply(transpose_pending);
++                    transpose_pending = 0;
++                  }
++                  if(!transpose_down_held && !transpose_up_held) {
++                    mode_chord_latched = false;
++                  }
+                   if(transpose<-12){transpose = -12;}
+                   if(transpose>12){transpose = 12;}
+                 } else if (k == BTN_SEQ1) {
+@@ -338,7 +445,7 @@ void keys_scan() {
+                 break;
+             case IDLE:
+                 if (k <= KEYB_9 && k >= KEYB_0) {
+-                  keyboard_unset_note(k - KEYB_0);
++                  keyboard_unset_note(key_note[k - KEYB_0]);
+                 }
+                 break;
+         }
+@@ -371,7 +478,8 @@ void note_on(uint8_t midi_note, uint8_t velocity, bool enabled) {
+ 
+     dc1.amplitude(velocity / 127.); // DC amplitude controls filter env amount.
+     osc_pulse_midi_note = midi_note;
+-    osc_pulse_target_frequency = (int)midi_note_to_frequency(midi_note);
++    // Stock firmware cut this down to whole hertz: 17 cents flat on a low D#
++    osc_pulse_target_frequency = midi_note_to_frequency(midi_note);
+     osc_pulse.frequency(osc_pulse_frequency);
+     // Detune OSC2
+     osc_saw.frequency(detune(osc_pulse_midi_note,detune_amount));
+@@ -402,6 +510,109 @@ void note_off() {
+   } 
+ }
+ 
++/*
++ * Keeps the delay time at a dotted eighth note of the current tempo, whatever
++ * the clock source. The time is folded into 255-510 ms: three steps when the
++ * steps run as 16th notes at 88-176 bpm, one and a half when they run as 8ths. A new time
++ * is only taken once the tempo has been steady for a moment, and the effect
++ * crossfades to it.
++ */
++void space_update() {
++  static float current_ms = 0;
++  static float pending_ms = 0;
++  static uint32_t pending_since = 0;
++
++  uint32_t pulse_us = tempo_handler.pulse_interval_us();
++  if(pulse_us < 2000 || pulse_us > 110000) {
++    return;
++  }
++  float d = pulse_us * 0.018f; // 18 pulses of the 24 ppqn clock, in ms
++  while(d > 510.0f) { d *= 0.5f; }
++  while(d <= 255.0f) { d *= 2.0f; }
++  // Stay in the current octave near the fold points instead of jumping back and forth
++  if(current_ms > 0) {
++    if(d * 2.0f <= 528.0f && fabsf(d * 2.0f - current_ms) < fabsf(d - current_ms)) {
++      d *= 2.0f;
++    } else if(d * 0.5f >= 246.0f && fabsf(d * 0.5f - current_ms) < fabsf(d - current_ms)) {
++      d *= 0.5f;
++    }
++  }
++
++  if(fabsf(d - current_ms) < current_ms * 0.015f) {
++    pending_ms = current_ms;
++    return;
++  }
++  if(fabsf(d - pending_ms) > pending_ms * 0.015f) {
++    pending_ms = d;
++    pending_since = millis();
++    return;
++  }
++  if(millis() - pending_since > 120) {
++    current_ms = pending_ms;
++    space1.delayTime(current_ms);
++  }
++}
++
++/*
++ * Answers the diagnostics sysex f0 7d 64 0c f7 with
++ * f0 7d 64 0c <audio cpu max %> <effect cpu max %> <audio blocks max> <delay ms high 7 bits> <low 7 bits> <synth mode> <sidechain enabled> <clock source> f7
++ * and restarts the maximum counters
++ */
++void set_synth_mode(uint8_t mode) {
++  if(mode >= SYNTH_MODE_COUNT || mode == synth_mode) {
++    return;
++  }
++  synth_mode = mode;
++  eeprom_write_byte((uint8_t*)EEPROM_SYNTH_MODE, synth_mode);
++  apply_synth_mode();
++  const uint32_t mode_colours[SYNTH_MODE_COUNT] = { 0x2050FF, 0xFF8010, 0xFF2090, 0xFFFFFF };
++  flash_keys(mode_colours[mode]);
++}
++
++void set_duck_enabled(bool enabled) {
++  if(duck_enabled == enabled) {
++    return;
++  }
++  duck_enabled = enabled;
++  duck_active = false; // rejoin unity through the existing short gain ramp
++  eeprom_write_byte((uint8_t*)EEPROM_DUCK_ENABLED, enabled ? DUCK_ENABLED_MARKER : 0);
++  flash_keys(enabled ? 0x00CC30 : 0xFF1000);
++}
++
++// A kick on the DRUM: pull the dry voice down for a moment. A hit softer than
++// velocity 100 ducks proportionally less.
++void duck_trigger(uint8_t velocity) {
++  if(!duck_enabled) { return; }
++  const SynthModeVoice &voice = SYNTH_MODE_VOICE[synth_mode];
++  float amount = (velocity >= 100) ? 1.0f : velocity / 100.0f;
++  duck_floor = 1.0f - (1.0f - voice.duck_gain) * amount;
++  duck_start_ms = millis();
++  duck_active = true;
++}
++
++void midi_print_diagnostics() {
++  int delay_ms = (int)(space1.delayTimeMs() + 0.5f);
++  uint8_t sysex[] = {
++    0xf0,
++    SYSEX_DATO_ID,
++    SYSEX_DUO_ID,
++    SYSEX_DIAGNOSTICS,
++    (uint8_t)constrain(AudioProcessorUsageMax(), 0, 127),
++    (uint8_t)constrain(space1.processorUsageMax(), 0, 127),
++    (uint8_t)constrain(AudioMemoryUsageMax(), 0, 127),
++    (uint8_t)((delay_ms >> 7) & 0x7f),
++    (uint8_t)(delay_ms & 0x7f),
++    synth_mode,
++    (uint8_t)duck_enabled,
++    tempo_handler.clock_source(),
++    0xf7 };
++
++  usbMIDI.sendSysEx(sizeof(sysex), sysex);
++  AudioProcessorUsageMaxReset();
++  space1.processorUsageMaxReset();
++  AudioMemoryUsageMaxReset();
++}
++
+ /*
+  * enter_dfu() writes a special string to the K20DX256's VBAT register and reboots the mcu
+  * This signals the Kiibohd DFU bootloader that it should start in firmware update mode
+diff --git a/src/synth_blep.cpp b/src/synth_blep.cpp
+new file mode 100644
+index 0000000..ae7e2b3
+--- /dev/null
++++ b/src/synth_blep.cpp
+@@ -0,0 +1,70 @@
++#include "synth_blep.h"
++
++// How far into the step we are, 0..32767, from the phase distance to the step
++// and the phase increment. Both are scaled down first so the division fits in
++// 32 bits (the K20 divides those in hardware).
++static inline int32_t step_position(uint32_t distance, uint32_t incr) {
++  uint32_t d = incr >> 11;
++  if (d == 0) return 32767;
++  uint32_t x = ((distance >> 11) << 15) / d;
++  return (x > 32767) ? 32767 : (int32_t)x;
++}
++
++// The polyBLEP residual at that position: (1 - x)^2, 32768 down to 0
++static inline int32_t residual(int32_t x) {
++  int32_t c = 32768 - x;
++  return (c * c) >> 15;
++}
++
++void AudioSynthBlep::update(void) {
++  if (tone_amp == 0) return;
++  audio_block_t *block = allocate();
++  if (!block) return;
++
++  int16_t *out = block->data;
++  uint32_t phase = tone_phase;
++  const uint32_t incr = tone_incr;
++  const int32_t amp = tone_amp;
++
++  if (tone_type == BLEP_SAWTOOTH) {
++    // Rises from 0, drops from top to bottom in the middle of its 2^31 period
++    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
++      int32_t v = (int16_t)(phase >> 15);
++      const uint32_t after = (phase + 0x40000000u) & 0x7fffffffu; // phase since the drop
++      const uint32_t before = 0x80000000u - after;                // phase until the next one
++      if (after < incr) {
++        v += residual(step_position(after, incr));
++      } else if (before < incr) {
++        v -= residual(step_position(before, incr));
++      }
++      *out++ = (int16_t)((v * amp) >> 15);
++      phase += incr;
++    }
++  } else {
++    // Low until the phase reaches the width, then high until it wraps at 2^32
++    const uint32_t width = tone_width;
++    for (int i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
++      int32_t v = (phase < width) ? -32767 : 32767;
++      const uint32_t after_rise = phase - width;
++      const uint32_t before_rise = width - phase;
++      const uint32_t after_fall = phase;
++      const uint32_t before_fall = 0u - phase;
++      if (after_rise < incr) {
++        v -= residual(step_position(after_rise, incr));
++      } else if (before_rise < incr) {
++        v += residual(step_position(before_rise, incr));
++      }
++      if (after_fall < incr) {
++        v += residual(step_position(after_fall, incr));
++      } else if (before_fall < incr && before_fall != 0) {
++        v -= residual(step_position(before_fall, incr));
++      }
++      *out++ = (int16_t)((v * amp) >> 15);
++      phase += incr;
++    }
++  }
++
++  tone_phase = phase;
++  transmit(block);
++  release(block);
++}
+diff --git a/src/synth_blep.h b/src/synth_blep.h
+new file mode 100644
+index 0000000..f777934
+--- /dev/null
++++ b/src/synth_blep.h
+@@ -0,0 +1,61 @@
++#ifndef synth_blep_h_
++#define synth_blep_h_
++/*
++  Sawtooth and pulse oscillators with band-limited steps (polyBLEP).
++
++  The stock AudioSynthWaveform draws its sawtooth and pulse with hard steps.
++  Those alias: mirror images of the upper harmonics land between the real ones
++  and are heard as thin whistles that move against the note, most of all with
++  two detuned oscillators and an open filter. Here the two samples around every
++  step are rounded off, which takes the whistles down by 15 to 28 dB.
++
++  Pitch and pulse width behave exactly like the stock oscillators in this
++  firmware: the sawtooth runs at the frequency it is given, the pulse an octave
++  below it (its phase wraps at 2^32, the sawtooth's at 2^31), and pulseWidth()
++  of 1.0 gives a square wave.
++*/
++#include "AudioStream.h"
++
++#define BLEP_SAWTOOTH 0
++#define BLEP_PULSE    1
++
++class AudioSynthBlep : public AudioStream
++{
++public:
++  AudioSynthBlep(void) : AudioStream(0, NULL), tone_phase(0), tone_incr(0),
++    tone_width(0x3fffffff), tone_amp(0), tone_type(BLEP_SAWTOOTH) {
++  }
++  void frequency(float freq) {
++    if (freq < 0.0f) freq = 0.0f;
++    else if (freq > AUDIO_SAMPLE_RATE_EXACT / 2) freq = AUDIO_SAMPLE_RATE_EXACT / 2;
++    tone_incr = (uint32_t)(freq * (2147483648.0 / AUDIO_SAMPLE_RATE_EXACT) + 0.5);
++  }
++  void amplitude(float n) {
++    if (n < 0.0f) n = 0.0f;
++    else if (n > 1.0f) n = 1.0f;
++    if ((tone_amp == 0) && n) {
++      tone_phase = 0;
++    }
++    tone_amp = (int16_t)(n * 32767.0f);
++  }
++  void pulseWidth(float n) {
++    if (n < 0.0f) n = 0.0f;
++    else if (n > 1.0f) n = 1.0f;
++    tone_width = (uint32_t)(n * 2147483647.0);
++  }
++  void begin(float amp, float freq, uint8_t type) {
++    tone_type = type;
++    tone_phase = 0;
++    amplitude(amp);
++    frequency(freq);
++  }
++  virtual void update(void);
++private:
++  uint32_t tone_phase;
++  volatile uint32_t tone_incr;
++  uint32_t tone_width;
++  int16_t tone_amp;
++  uint8_t tone_type;
++};
++
++#endif
+diff --git a/teensy3/teensy3/usb_midi.c b/teensy3/teensy3/usb_midi.c
+index 6cbee94..f0e81df 100644
+--- a/teensy3/teensy3/usb_midi.c
++++ b/teensy3/teensy3/usb_midi.c
+@@ -52,6 +52,7 @@ void (*usb_midi_handlePitchChange)(uint8_t ch, int pitch) = NULL;
+ void (*usb_midi_handleSysEx)(const uint8_t *data, uint16_t length, uint8_t complete) = NULL;
+ void (*usb_midi_handleRealTimeSystem)(uint8_t rtb) = NULL;
+ void (*usb_midi_handleTimeCodeQuarterFrame)(uint16_t data) = NULL;
++void (*usb_midi_handleSongPosition)(uint16_t beats) = NULL;
+ 
+ // Maximum number of transmit packets to queue so we don't starve other endpoints for memory
+ #define TX_PACKET_LIMIT 6
+@@ -286,6 +287,14 @@ int usb_midi_read(uint32_t channel)
+ 			goto return_message;
+ 		}
+ 	}
++	if (type1 == 0x03) {
++		// Three byte System Common. Song Position Pointer: f2, low 7 bits, high 7 bits
++		// (added for the Dato DUO melodic techno build)
++		if (((n >> 8) & 0xFF) == 0xF2 && usb_midi_handleSongPosition) {
++			(*usb_midi_handleSongPosition)(((n >> 16) & 0x7F) | (((n >> 24) & 0x7F) << 7));
++		}
++		return 1;
++	}
+ 	if (type1 == 0x02) {
+ 		// From Timm Schlegelmilch, karg.music at gmail.com
+ 		// http://karg-music.blogspot.de/2015/06/receiving-midi-time-codes-over-usb-with.html
+diff --git a/teensy3/teensy3/usb_midi.h b/teensy3/teensy3/usb_midi.h
+index c05d1e0..18e91e7 100644
+--- a/teensy3/teensy3/usb_midi.h
++++ b/teensy3/teensy3/usb_midi.h
+@@ -82,6 +82,7 @@ extern void (*usb_midi_handlePitchChange)(uint8_t ch, int pitch);
+ extern void (*usb_midi_handleSysEx)(const uint8_t *data, uint16_t length, uint8_t complete);
+ extern void (*usb_midi_handleRealTimeSystem)(uint8_t rtb);
+ extern void (*usb_midi_handleTimeCodeQuarterFrame)(uint16_t data);
++extern void (*usb_midi_handleSongPosition)(uint16_t beats);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/src/effect_gain_ramp.h b/src/effect_gain_ramp.h
+new file mode 100644
+index 0000000..1d6ae57
+--- /dev/null
++++ b/src/effect_gain_ramp.h
+@@ -0,0 +1,48 @@
++#ifndef effect_gain_ramp_h_
++#define effect_gain_ramp_h_
++/*
++  A gain that glides to its target across one audio block (2.9 ms) instead of
++  jumping at the block boundary. Used to duck the dry voice under the DRUM's
++  kick: the jump of up to 3 dB that the output mixer made was audible as a
++  tick (measured on the instrument's output, 19.11.2026).
++*/
++#include "AudioStream.h"
++
++class AudioEffectGainRamp : public AudioStream
++{
++public:
++  AudioEffectGainRamp(void) : AudioStream(1, inputQueueArray), current(32767), target(32767) {}
++  // 0.0 - 1.0
++  void gain(float level) {
++    if(level < 0.0f) { level = 0.0f; }
++    if(level > 1.0f) { level = 1.0f; }
++    target = (int32_t)(level * 32767.0f);
++  }
++  virtual void update(void) {
++    const int32_t goal = target;
++    audio_block_t *block = receiveWritable(0);
++    if(!block) {
++      current = goal;
++      return;
++    }
++    if(current != 32767 || goal != 32767) {
++      // Q24 gain, stepped once per sample
++      int32_t g = current << 9;
++      const int32_t step = ((goal - current) * 512) / AUDIO_BLOCK_SAMPLES;
++      int16_t *p = block->data;
++      for(uint16_t i = 0; i < AUDIO_BLOCK_SAMPLES; i++) {
++        g += step;
++        p[i] = (int16_t)(((int32_t)p[i] * (g >> 9)) >> 15);
++      }
++      current = goal;
++    }
++    transmit(block);
++    release(block);
++  }
++private:
++  audio_block_t *inputQueueArray[1];
++  int32_t current;          // Q15
++  volatile int32_t target;  // Q15
++};
++
++#endif

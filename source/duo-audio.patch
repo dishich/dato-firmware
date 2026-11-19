@@ -1,0 +1,21 @@
+diff --git a/output_dac.cpp b/output_dac.cpp
+index a7b1771..a4e2eff 100644
+--- a/output_dac.cpp
++++ b/output_dac.cpp
+@@ -139,14 +139,14 @@ void AudioOutputAnalog::isr(void)
+ 		src = block->data;
+ 		do {
+ 			// TODO: this should probably dither
+-			*dest++ = ((*src++) + 32767) >> 4;
++			*dest++ = ((*src++) + 32768) >> 4;
+ 		} while (dest < end);
+ 		AudioStream::release(block);
+ 		AudioOutputAnalog::block_left_1st = AudioOutputAnalog::block_left_2nd;
+ 		AudioOutputAnalog::block_left_2nd = NULL;
+ 	} else {
+ 		do {
+-			*dest++ = 2047;
++			*dest++ = 2048;
+ 		} while (dest < end);
+ 	}
+ 	if (AudioOutputAnalog::update_responsibility) AudioStream::update_all();

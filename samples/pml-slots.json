@@ -1,0 +1,578 @@
+[
+  {
+    "slot": 30,
+    "pack": "melodic",
+    "source": "Kicks/Kick_003_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_deep_short",
+    "note": "D#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 31,
+    "pack": "melodic",
+    "source": "Kicks/Kick_008_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_deep_long",
+    "note": "D#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 32,
+    "pack": "melodic",
+    "source": "Kicks/Kick_033_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_fat",
+    "note": "F#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 33,
+    "pack": "melodic",
+    "source": "Kicks/Kick_032_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_click_longsub",
+    "note": "F#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 34,
+    "pack": "melodic",
+    "source": "Kicks/Kick_010_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_round",
+    "note": "G#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 35,
+    "pack": "melodic",
+    "source": "Kicks/Kick_011_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_long_harmonic",
+    "note": "G#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 36,
+    "pack": "melodic",
+    "source": "Kicks/Kick_007_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_punch",
+    "note": "A#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 37,
+    "pack": "melodic",
+    "source": "Kicks/Kick_030_-_(PML_MTD_FR_V1).wav",
+    "name": "kick_knock",
+    "note": "A#1",
+    "level": -11.0,
+    "highpass": 25
+  },
+  {
+    "slot": 38,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_037_-_(PML_MTD_FR_V1).wav",
+    "name": "clap_fat",
+    "note": null,
+    "level": -13.0,
+    "highpass": 120
+  },
+  {
+    "slot": 39,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_042_-_(PML_MTD_FR_V1).wav",
+    "name": "clap_tight",
+    "note": null,
+    "level": -13.0,
+    "highpass": 120
+  },
+  {
+    "slot": 40,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_001_-_(PML_MTD_FR_V1).wav",
+    "name": "clap_tail",
+    "note": null,
+    "level": -13.5,
+    "highpass": 120
+  },
+  {
+    "slot": 41,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_007_-_(PML_MTD_FR_V1).wav",
+    "name": "clap_noise_long",
+    "note": null,
+    "level": -14.5,
+    "highpass": 150
+  },
+  {
+    "slot": 42,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_040_-_(PML_MTD_FR_V1).wav",
+    "name": "snare_body",
+    "note": "F#3",
+    "level": -13.0,
+    "highpass": 90
+  },
+  {
+    "slot": 43,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_039_-_(PML_MTD_FR_V1).wav",
+    "name": "snare_bright",
+    "note": "A#3",
+    "level": -14.0,
+    "highpass": 120
+  },
+  {
+    "slot": 44,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_016_-_(PML_MTD_FR_V1).wav",
+    "name": "snare_low",
+    "note": null,
+    "level": -13.5,
+    "highpass": 60
+  },
+  {
+    "slot": 45,
+    "pack": "melodic",
+    "source": "Claps Snares/ClapSnare_004_-_(PML_MTD_FR_V1).wav",
+    "name": "snap",
+    "note": null,
+    "level": -18.5,
+    "highpass": 200
+  },
+  {
+    "slot": 46,
+    "pack": "melodic",
+    "source": "Toms/Tom_001_-_(PML_MTD_FR_V1).wav",
+    "name": "tom_low",
+    "note": "D#2",
+    "level": -14.0,
+    "highpass": 30
+  },
+  {
+    "slot": 47,
+    "pack": "melodic",
+    "source": "Toms/Tom_012_-_(PML_MTD_FR_V1).wav",
+    "name": "tom_mid",
+    "note": "G#2",
+    "level": -14.5,
+    "highpass": 40
+  },
+  {
+    "slot": 48,
+    "pack": "melodic",
+    "source": "Toms/Tom_008_-_(PML_MTD_FR_V1).wav",
+    "name": "tom_high",
+    "note": "C#3",
+    "level": -15.0,
+    "highpass": 50
+  },
+  {
+    "slot": 49,
+    "pack": "melodic",
+    "source": "Percs/Perc_032_-_(PML_MTD_FR_V1).wav",
+    "name": "tone_stab",
+    "note": "A#3",
+    "level": -17.0,
+    "highpass": 80
+  },
+  {
+    "slot": 50,
+    "pack": "melodic",
+    "source": "Percs/Perc_043_-_(PML_MTD_FR_V1).wav",
+    "name": "perc_mid",
+    "note": "D#4",
+    "level": -17.5,
+    "highpass": 100
+  },
+  {
+    "slot": 51,
+    "pack": "melodic",
+    "source": "Percs/Perc_069_-_(PML_MTD_FR_V1).wav",
+    "name": "perc_wood_click",
+    "note": "B3",
+    "level": -18.5,
+    "highpass": 100
+  },
+  {
+    "slot": 52,
+    "pack": "melodic",
+    "source": "Percs/Perc_076_-_(PML_MTD_FR_V1).wav",
+    "name": "perc_bell",
+    "note": "G#5",
+    "level": -18.5,
+    "highpass": 200
+  },
+  {
+    "slot": 53,
+    "pack": "melodic",
+    "source": "Percs/Perc_003_-_(PML_MTD_FR_V1).wav",
+    "name": "perc_ping",
+    "note": "A#6",
+    "level": -20.0,
+    "highpass": 300
+  },
+  {
+    "slot": 54,
+    "pack": "melodic",
+    "source": "Hats/Hihat_037_-_(PML_MTD_FR_V1).wav",
+    "name": "hat_closed_bright",
+    "note": null,
+    "level": -20.5,
+    "highpass": 400
+  },
+  {
+    "slot": 55,
+    "pack": "melodic",
+    "source": "Hats/Hihat_023_-_(PML_MTD_FR_V1).wav",
+    "name": "hat_closed_metal",
+    "note": null,
+    "level": -20.5,
+    "highpass": 300
+  },
+  {
+    "slot": 56,
+    "pack": "melodic",
+    "source": "Hats/Hihat_007_-_(PML_MTD_FR_V1).wav",
+    "name": "hat_tick",
+    "note": null,
+    "level": -21.5,
+    "highpass": 400
+  },
+  {
+    "slot": 57,
+    "pack": "melodic",
+    "source": "Hats/Hihat_034_-_(PML_MTD_FR_V1).wav",
+    "name": "hat_open_short",
+    "note": null,
+    "level": -21.0,
+    "highpass": 400
+  },
+  {
+    "slot": 58,
+    "pack": "melodic",
+    "source": "Hats/Hihat_009_-_(PML_MTD_FR_V1).wav",
+    "name": "hat_open_long",
+    "note": null,
+    "level": -21.5,
+    "highpass": 400
+  },
+  {
+    "slot": 59,
+    "pack": "melodic",
+    "source": "Hats/Hihat_010_-_(PML_MTD_FR_V1).wav",
+    "name": "hat_open_air",
+    "note": null,
+    "level": -22.5,
+    "highpass": 600
+  },
+  {
+    "slot": 60,
+    "pack": "melodic",
+    "source": "Shakers/Shaker_005_-_(PML_MTD_FR_V1).wav",
+    "name": "shaker",
+    "note": null,
+    "level": -22.5,
+    "highpass": 500
+  },
+  {
+    "slot": 61,
+    "pack": "melodic",
+    "source": "Hats/Hihat_014_-_(PML_MTD_FR_V1).wav",
+    "name": "ride",
+    "note": null,
+    "level": -22.0,
+    "highpass": 300
+  },
+  {
+    "slot": 62,
+    "pack": "organic",
+    "source": "One Shots/Mono/Kicks/PML_FR_ Kick_006_E_(mono).wav",
+    "name": "kick_deep_round",
+    "note": "D#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 63,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Kick/PML_FB_Kick_024.wav",
+    "name": "kick_deep_mid",
+    "note": "D#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 64,
+    "pack": "organic",
+    "source": "One Shots/Mono/Kicks/PML_FR_ Kick_005_F_(mono).wav",
+    "name": "kick_warm_long",
+    "note": "F#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 65,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Kick/PML_FB_Kick_013.wav",
+    "name": "kick_click_long",
+    "note": "F#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 66,
+    "pack": "organic",
+    "source": "One Shots/Mono/Kicks/PML_FR_ Kick_002_A_(mono).wav",
+    "name": "kick_round",
+    "note": "G#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 67,
+    "pack": "organic",
+    "source": "One Shots/Mono/Kicks/PML_FR_ Kick_004_G_(mono).wav",
+    "name": "kick_short_tight",
+    "note": "G#1",
+    "level": -10.5,
+    "highpass": 22
+  },
+  {
+    "slot": 68,
+    "pack": "organic",
+    "source": "One Shots/Mono/Kicks/PML_FR_ Kick_001_A_(mono).wav",
+    "name": "kick_soft_thud",
+    "note": "A#1",
+    "level": -11.0,
+    "highpass": 22
+  },
+  {
+    "slot": 69,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Kick/PML_FB_Kick_015.wav",
+    "name": "kick_punch_short",
+    "note": "F#1",
+    "level": -10.0,
+    "highpass": 22
+  },
+  {
+    "slot": 70,
+    "pack": "organic",
+    "source": "One Shots/Mono/Claps/PML_FR_ Clap_009_G_(mono).wav",
+    "name": "clap_full",
+    "note": null,
+    "level": -13.5,
+    "highpass": 120
+  },
+  {
+    "slot": 71,
+    "pack": "organic",
+    "source": "One Shots/Mono/Claps/PML_FR_ Clap_002_E_(mono).wav",
+    "name": "clap_dark_soft",
+    "note": null,
+    "level": -14.0,
+    "highpass": 120
+  },
+  {
+    "slot": 72,
+    "pack": "organic",
+    "source": "One Shots/Mono/Claps/PML_FR_ Clap_007_E_(mono).wav",
+    "name": "clap_loose_hands",
+    "note": null,
+    "level": -14.0,
+    "highpass": 120
+  },
+  {
+    "slot": 73,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Clap/PML_FB_Clap_003.wav",
+    "name": "clap_tight",
+    "note": null,
+    "level": -13.5,
+    "highpass": 120
+  },
+  {
+    "slot": 74,
+    "pack": "organic",
+    "source": "One Shots/Mono/Snaps/PML_FR_ Snap_003_(mono).wav",
+    "name": "finger_snap",
+    "note": null,
+    "level": -17.0,
+    "highpass": 300
+  },
+  {
+    "slot": 75,
+    "pack": "organic",
+    "source": "One Shots/Mono/Stick Shots/PML_FR_ StickShot_006_(mono).wav",
+    "name": "stick",
+    "note": null,
+    "level": -16.0,
+    "highpass": 200
+  },
+  {
+    "slot": 76,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Snare/PML_FB_Snare_008.wav",
+    "name": "snare_soft_dark",
+    "note": null,
+    "level": -14.5,
+    "highpass": 90
+  },
+  {
+    "slot": 77,
+    "pack": "organic",
+    "source": "One Shots/Mono/Claps/PML_FR_ Clap_004_G_(mono).wav",
+    "name": "clap_bright_short",
+    "note": null,
+    "level": -16.0,
+    "highpass": 150
+  },
+  {
+    "slot": 78,
+    "pack": "organic",
+    "source": "One Shots/Mono/Toms/PML_FR_Tom_009_D_(mono).wav",
+    "name": "tom_low",
+    "note": "D#2",
+    "level": -14.0,
+    "highpass": 35
+  },
+  {
+    "slot": 79,
+    "pack": "organic",
+    "source": "One Shots/Mono/Toms/PML_FR_Tom_005_F_(mono).wav",
+    "name": "tom_mid",
+    "note": "F#2",
+    "level": -14.5,
+    "highpass": 40
+  },
+  {
+    "slot": 80,
+    "pack": "organic",
+    "source": "One Shots/Mono/Bongo Shots/PML_FR_ BongoShot_008_(mono).wav",
+    "name": "bongo_mid",
+    "note": "D#4",
+    "level": -15.5,
+    "highpass": 100
+  },
+  {
+    "slot": 81,
+    "pack": "organic",
+    "source": "One Shots/Mono/Bongo Shots/PML_FR_ BongoShot_009_(mono).wav",
+    "name": "bongo_low",
+    "note": "G#3",
+    "level": -15.5,
+    "highpass": 90
+  },
+  {
+    "slot": 82,
+    "pack": "organic",
+    "source": "One Shots/Mono/Bongo Shots/PML_FR_ BongoShot_003_(mono).wav",
+    "name": "bongo_high",
+    "note": "A#4",
+    "level": -16.0,
+    "highpass": 120
+  },
+  {
+    "slot": 83,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/2 Percussion/Percussion 2 _Acoustic/PML_FB_PercAcoustic_011.wav",
+    "name": "acoustic_drum",
+    "note": "D#3",
+    "level": -15.5,
+    "highpass": 80
+  },
+  {
+    "slot": 84,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/2 Percussion/Bell/PML_FB_Bell_003.wav",
+    "name": "bell",
+    "note": "D#6",
+    "level": -18.5,
+    "highpass": 300
+  },
+  {
+    "slot": 85,
+    "pack": "organic",
+    "source": "One Shots/Mono/Percussion Shots/PML_FR_ PercussionShot_011_(mono).wav",
+    "name": "wood_low",
+    "note": "F3",
+    "level": -16.5,
+    "highpass": 100
+  },
+  {
+    "slot": 86,
+    "pack": "organic",
+    "source": "One Shots/Mono/Glass Hats/PML_FR_ GlassHat_007_(mono).wav",
+    "name": "glass_hat_tight",
+    "note": null,
+    "level": -20.0,
+    "highpass": 400
+  },
+  {
+    "slot": 87,
+    "pack": "organic",
+    "source": "One Shots/Mono/Glass Hats/PML_FR_ GlassHat_008_(mono).wav",
+    "name": "glass_hat_long",
+    "note": null,
+    "level": -20.5,
+    "highpass": 400
+  },
+  {
+    "slot": 88,
+    "pack": "organic",
+    "source": "One Shots/Mono/Glass Hats/PML_FR_ GlassHat_003_(mono).wav",
+    "name": "glass_tick",
+    "note": null,
+    "level": -21.0,
+    "highpass": 500
+  },
+  {
+    "slot": 89,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Hihat/PML_FB_Hihat_011.wav",
+    "name": "hat_open",
+    "note": null,
+    "level": -21.0,
+    "highpass": 400
+  },
+  {
+    "slot": 90,
+    "pack": "organic",
+    "source": "One Shots/Mono/Shaker Shots/PML_FR_ShakerShot_009_(mono).wav",
+    "name": "shaker_short",
+    "note": null,
+    "level": -19.5,
+    "highpass": 500
+  },
+  {
+    "slot": 91,
+    "pack": "organic",
+    "source": "One Shots/Mono/Shaker Shots/PML_FR_ShakerShot_008_(mono).wav",
+    "name": "shaker_mid",
+    "note": null,
+    "level": -20.0,
+    "highpass": 500
+  },
+  {
+    "slot": 92,
+    "pack": "organic",
+    "source": "One Shots/Mono/Shaker Shots/PML_FR_ShakerShot_012_(mono).wav",
+    "name": "shaker_long",
+    "note": null,
+    "level": -20.5,
+    "highpass": 500
+  },
+  {
+    "slot": 93,
+    "pack": "percussive",
+    "source": "PML_FB_OneShots/1 Drums/Hihat/PML_FB_Hihat_002.wav",
+    "name": "hat_closed",
+    "note": null,
+    "level": -20.5,
+    "highpass": 400
+  }
+]
