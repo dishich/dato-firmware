@@ -10,6 +10,10 @@ Two small instruments, one MIDI cable. My custom DUO adds voices for melodic tec
 | Dato DRUM | Dato's four-voice RP2350 drum machine, with MIDI firmware update support | DRUM-1.0.1-dishich.uf2 |
 | DRUM one-shots | Two optional original synthesized kits, 32 sounds each, mono 44.1 kHz / PCM16 | dishich-original-kits.zip |
 
+**Illustrated field guide** · [English PDF](https://github.com/dishich/dato-firmware/releases/download/v1.2.66/Dato-Field-Guide-EN.pdf) · [Русский PDF](https://github.com/dishich/dato-firmware/releases/download/v1.2.66/Dato-Field-Guide-RU.pdf)
+
+Five pocket pages cover the mode colours, button combinations, per-track sixteenths, live effects and the MIDI connection.
+
 ### Play the pair
 
 Connect **DRUM MIDI OUT → DUO MIDI IN** using a 5-pin DIN cable. Set the DUO speed knob near the middle and press Play on DRUM. This gives a 1:1 pulse. Each instrument has its own audio output.
