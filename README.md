@@ -23,14 +23,23 @@ Six pocket pages start with a hardware check and cover the mode colours, button 
 ### What the firmware changes
 
 - **Stay together over MIDI.** DRUM leads. Sweeping its filter sends fewer duplicate control messages. Hold ×2 on DUO for a fill, release it and the melody returns to the master's current step.
-- **Change the synth's character.** DUO has four voices: Factory, Techno, Organic and Organic East. The custom voices combine different keyboard scales with tuned filter and echo settings. Accent individual steps and optionally dip the synth under the kick.
 - **Play 96 drum sounds.** Three banks of 32. Each bank has four tracks with eight sounds per track. Factory's 32 are built into the firmware. The two additional kits supply 64. Set one track to sixteenths while the others hold eighths.
 
 ### Play the pair
 
 Connect **DRUM MIDI OUT → DUO MIDI IN** using a 5-pin DIN cable. Set the DUO speed knob near the middle and press Play on DRUM. This gives a 1:1 pulse. Each instrument has its own audio output.
 
-- **DUO voices.** Press both transpose arrows together to cycle Factory (white), Techno (blue, natural minor), Organic (amber, minor pentatonic) and Organic East (pink, harmonic minor). The three custom voices are centred on D♯. Their filter response, delay and space are voiced for live playing.
+I developed the DUO modes with Claude Fable. I wanted a bass voice for melodic techno and a softer one for organic house, with Armen Miran as a reference. Press both transpose arrows together to move through these four modes.
+
+| DUO mode | What to play and listen for |
+| --- | --- |
+| Factory · white | Start with the familiar factory pentatonic layout. |
+| Techno · blue | Play a held bass note in D♯ natural minor. The filter opens quickly, then falls back while the note is held. The saw is at full level and the dotted-eighth echo has more feedback. |
+| Organic · amber | Play a short call and response in D♯ minor pentatonic. The softer attack, quieter saw and fewer repeats leave room for percussion and the reverb tail. |
+| Organic East · pink | Play D then D♯ near the top of the keyboard. That half step resolves to the root of D♯ harmonic minor. The oscillators, filter and effects use the same settings as Organic. |
+
+On startup, each custom mode draws from four eight-step patterns. Techno includes a low pulse and a descending line. Organic has a phrase written to answer the bongos. Organic East has its own bass and Hijaz-style phrases. Pressing both transpose arrows during a jam changes the mode and preserves your running sequence.
+
 - **DUO gestures.** With the sequencer stopped, hold Accent and tap a step to accent it. Accent + transpose up switches kick ducking. When playing to the DRUM, holding ×2 adds temporary steps. Release it and the melody comes back to its original place in the bar.
 - **DRUM kits.** Press the next-sample buttons on tracks 1 and 2 together to cycle Factory → Techno → Organic. Factory's 32 sounds are embedded. Techno and Organic read editable slots 30–61 and 62–93. Install either the original downloadable samples or the banks rebuilt from the demo recipe.
 - **DRUM rhythm.** Press both sample arrows of a single track together to toggle eighths and sixteenths. The filter sends fewer redundant MIDI messages. Sample switching, swing and retrigger handling have also been revised.
